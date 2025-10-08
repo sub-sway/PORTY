@@ -18,45 +18,42 @@ st.set_page_config(page_title="항만시설 안전 지킴이 대시보드", layo
 st.title("🛡️ 항만시설 현장 안전 모니터링 (HiveMQ Cloud)")
 
 # ===============================
-# 세션 상태 초기화 (안전하게 보장)
+# 연결 상태 전역 변수
 # ===============================
-if "connected" not in st.session_state:
-    st.session_state["connected"] = False
-if "connecting" not in st.session_state:
-    st.session_state["connecting"] = True
-
-# ✅ 전역 메시지 버퍼 (스레드 안전)
+connection_status = {"connecting": True, "connected": False}
 messages_buffer = []
 
 # ===============================
 # MQTT 콜백 정의
 # ===============================
-def on_connect(client, userdata, flags, rc):
+def on_connect(client, userdata, flags, rc, properties=None):
+    """MQTT 연결 콜백"""
     if rc == 0:
         client.subscribe(TOPIC)
-        st.session_state["connected"] = True
-        st.session_state["connecting"] = False
-        print(f"✅ MQTT 구독 성공: {TOPIC}")
+        connection_status["connected"] = True
+        connection_status["connecting"] = False
+        print(f"✅ HiveMQ Cloud 연결 성공 (topic: {TOPIC})")
     else:
-        st.session_state["connecting"] = False
-        print(f"❌ MQTT 연결 실패 (코드 {rc})")
+        connection_status["connected"] = False
+        connection_status["connecting"] = False
+        print(f"❌ HiveMQ Cloud 연결 실패, 코드={rc}")
 
 def on_message(client, userdata, msg):
+    """MQTT 메시지 수신 콜백"""
     try:
         payload = msg.payload.decode()
         data = json.loads(payload)
-    except:
+    except Exception:
         data = {"type": "unknown", "message": msg.payload.decode()}
 
-    # ✅ 정상 상태 제외
     if data.get("type") not in ["fire", "safety"]:
         return
 
-    messages_buffer.insert(0, data)  # 새 메시지 맨 위로 추가
-    print(f"📩 MQTT 수신: {data}")
+    messages_buffer.insert(0, data)
+    print(f"📩 수신: {data}")
 
 # ===============================
-# MQTT 자동 연결
+# MQTT 연결 함수
 # ===============================
 def connect_mqtt():
     client = mqtt.Client(callback_api_version=mqtt.CallbackAPIVersion.VERSION2)
@@ -64,24 +61,24 @@ def connect_mqtt():
     client.tls_set(cert_reqs=ssl.CERT_NONE)
     client.on_connect = on_connect
     client.on_message = on_message
+
     try:
         client.connect(BROKER, PORT, 60)
         client.loop_start()
         print("🟡 HiveMQ Cloud 연결 시도 중...")
     except Exception as e:
-        st.session_state["connecting"] = False
+        connection_status["connecting"] = False
         print(f"❌ MQTT 연결 실패: {e}")
 
-# ✅ 앱 시작 시 자동 연결
-if not st.session_state["connected"] and st.session_state["connecting"]:
-    threading.Thread(target=connect_mqtt, daemon=True).start()
+# 앱 시작 시 자동 연결
+threading.Thread(target=connect_mqtt, daemon=True).start()
 
 # ===============================
-# 연결 상태 표시
+# UI 표시
 # ===============================
-if st.session_state["connecting"]:
+if connection_status["connecting"]:
     st.warning("🔄 HiveMQ Cloud 연결 중...")
-elif st.session_state["connected"]:
+elif connection_status["connected"]:
     st.success("🟢 HiveMQ Cloud 연결됨")
 else:
     st.error("❌ MQTT 연결 실패")
@@ -91,9 +88,6 @@ st.subheader("📡 실시간 경보 내역")
 
 placeholder = st.empty()
 
-# ===============================
-# 메시지 렌더링 함수
-# ===============================
 def render_message(msg):
     msg_type = msg.get("type", "info")
     message = msg.get("message", "")
@@ -105,14 +99,11 @@ def render_message(msg):
     elif msg_type == "safety":
         st.warning(f"⚠ **안전조끼 미착용** {message}\n🕓 {timestamp}\n📍 {source}")
 
-# ===============================
-# UI 업데이트 스레드 (session_state 접근 금지)
-# ===============================
 def update_ui():
     while True:
         if messages_buffer:
             with placeholder.container():
-                for msg in messages_buffer[:10]:  # 최근 10개 표시
+                for msg in messages_buffer[:10]:
                     render_message(msg)
         time.sleep(0.5)
 
