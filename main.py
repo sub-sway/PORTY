@@ -1,110 +1,110 @@
 import streamlit as st
 import paho.mqtt.client as mqtt
 import json
-import socket
 import threading
 import time
+import ssl
+from datetime import datetime
 
-st.set_page_config(page_title="ROS2 알림 모니터", layout="wide")
-st.title("📡 ROS2 → MQTT 알림 모니터링")
+# =======================================
+# 기본 설정
+# =======================================
+BROKER = "8e008ba716c74e97a3c1588818ddb209.s1.eu.hivemq.cloud"
+PORT = 8883  # SSL 포트
+USERNAME = "JetsonOrin"
+PASSWORD = "One24511"
+TOPIC = "robot/alerts"
 
-# ----------------------------
+st.set_page_config(page_title="항만시설 안전 지킴이 경비 로봇", layout="wide")
+st.title("🛡️ 항만시설 현장 안전 지킴이 대시보드")
+
+# =======================================
 # 세션 상태 초기화
-# ----------------------------
-# ✅ 브로커 IP를 직접 고정 (여기만 바꾸면 됨)
-FIXED_BROKER_IP = "192.168.0.108"
-
-if "broker_ip" not in st.session_state:
-    st.session_state["broker_ip"] = FIXED_BROKER_IP
+# =======================================
 if "connected" not in st.session_state:
     st.session_state["connected"] = False
-if "topic" not in st.session_state:
-    st.session_state["topic"] = "robot/alerts"
+if "client" not in st.session_state:
+    st.session_state["client"] = None
+if "messages" not in st.session_state:
+    st.session_state["messages"] = []
 
-message_buffer = []
-
-# ----------------------------
+# =======================================
 # MQTT 콜백
-# ----------------------------
+# =======================================
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
-        topic = userdata.get("topic", "robot/alerts")
-        client.subscribe(topic)
-        print(f"✅ MQTT 구독 성공: {topic}")
+        client.subscribe(TOPIC)
+        st.session_state["connected"] = True
+        st.toast(f"✅ MQTT 연결 성공: {TOPIC}", icon="🟢")
     else:
-        print(f"❌ MQTT 연결 실패 (코드: {rc})")
+        st.error(f"❌ MQTT 연결 실패 (코드: {rc})")
 
 def on_message(client, userdata, msg):
     try:
-        data = msg.payload.decode()
-        parsed = json.loads(data)
+        payload = msg.payload.decode()
+        data = json.loads(payload)
     except:
-        parsed = {"message": msg.payload.decode()}
-    message_buffer.append(parsed)
-    print(f"📩 MQTT 수신: {parsed}")
+        data = {"message": msg.payload.decode(), "type": "unknown"}
 
-# ----------------------------
+    data["time"] = datetime.now().strftime("%H:%M:%S")
+    st.session_state["messages"].insert(0, data)
+
+# =======================================
 # MQTT 연결 함수
-# ----------------------------
-def connect_mqtt(ip, port, topic):
+# =======================================
+def connect_mqtt():
     try:
-        client = mqtt.Client(userdata={"topic": topic})
-    except TypeError:
-        client = mqtt.Client(callback_api_version=4, userdata={"topic": topic})
-
-    client.on_connect = on_connect
-    client.on_message = on_message
-
-    try:
-        client.connect(ip, int(port), 60)
+        client = mqtt.Client()
+        client.username_pw_set(USERNAME, PASSWORD)
+        client.tls_set(cert_reqs=ssl.CERT_NONE)
+        client.on_connect = on_connect
+        client.on_message = on_message
+        client.connect(BROKER, PORT, 60)
         client.loop_start()
-        st.session_state["connected"] = True
         st.session_state["client"] = client
-        st.toast(f"✅ MQTT 브로커 연결 성공 ({ip}:{port})", icon="🟢")
+        st.session_state["connected"] = True
+        st.success("✅ HiveMQ Cloud 브로커 연결 성공")
     except Exception as e:
+        st.error(f"❌ 연결 실패: {e}")
         st.session_state["connected"] = False
-        st.error(f"❌ MQTT 연결 실패: {e}")
 
-# ----------------------------
-# 사이드바
-# ----------------------------
-st.sidebar.header("⚙️ MQTT 설정")
-st.sidebar.caption("Jetson Orin에서 실행 중인 MQTT 브로커에 연결합니다.")
+# =======================================
+# MQTT 연결 버튼
+# =======================================
+if not st.session_state["connected"]:
+    if st.button("🔌 HiveMQ Cloud 연결하기"):
+        connect_mqtt()
+else:
+    st.success("🟢 연결 상태: HiveMQ Cloud 활성")
 
-# ✅ IP는 고정값 사용
-broker_ip = FIXED_BROKER_IP
-port = st.sidebar.number_input("포트 번호", min_value=1, max_value=65535, value=1883)
-topic = st.sidebar.text_input("토픽", st.session_state["topic"])
-connect_btn = st.sidebar.button("💾 연결")
-
-if connect_btn:
-    st.session_state["broker_ip"] = broker_ip
-    st.session_state["topic"] = topic
-    connect_mqtt(broker_ip, port, topic)
-
-# ----------------------------
-# UI 표시
-# ----------------------------
-st.markdown(f"**📡 현재 브로커:** `{broker_ip}:{port}`")
-st.markdown(f"**🔌 연결 상태:** {'🟢 연결됨' if st.session_state['connected'] else '🔴 끊김'}")
 st.divider()
-st.subheader("📨 실시간 알림 내역")
+
+# =======================================
+# 실시간 메시지 표시
+# =======================================
+st.subheader("📡 실시간 경보 수신 로그")
 
 placeholder = st.empty()
 
+def render_message(msg):
+    msg_type = msg.get("type", "info")
+    text = msg.get("message", "")
+    timestamp = msg.get("time", "")
+    if msg_type in ["fire", "gas", "intruder"]:
+        st.error(f"🚨 [{msg_type.upper()}] {text}  \n🕓 {timestamp}")
+    elif msg_type == "normal":
+        st.success(f"✅ 정상 상태  \n🕓 {timestamp}")
+    else:
+        st.info(f"ℹ️ {text}  \n🕓 {timestamp}")
+
 def update_ui():
     while True:
-        if message_buffer:
-            msg = message_buffer.pop(0)
-            msg_type = msg.get("type", "info")
-            message = msg.get("message", "")
-            if msg_type in ["intruder", "fire", "gas"]:
-                placeholder.error(f"🚨 [{msg_type.upper()}] {message}")
-            else:
-                placeholder.info(f"✅ 정상 상태 ({msg_type})")
-            st.experimental_rerun()
+        if st.session_state["messages"]:
+            with placeholder.container():
+                for msg in st.session_state["messages"][:10]:  # 최근 10개 표시
+                    render_message(msg)
         time.sleep(0.5)
 
 threading.Thread(target=update_ui, daemon=True).start()
 
-st.info("MQTT 메시지를 수신하면 자동으로 화면에 표시됩니다.")
+st.caption("※ Jetson Orin에서 전송된 화재, 침입, 가스 이상 신호를 실시간으로 표시합니다.")
