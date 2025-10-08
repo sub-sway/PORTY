@@ -1,1 +1,16 @@
-streamlit
+# ==========================
+# Streamlit 실시간 모니터링 대시보드
+# ==========================
+
+# Streamlit UI
+streamlit>=1.33.0
+
+# MQTT 통신
+paho-mqtt>=1.6.1
+
+# 데이터 처리
+numpy>=1.24.0
+pandas>=2.0.0
+
+# 영상 스트리밍 및 이미지 처리
+opencv-python==4.8.1.78
