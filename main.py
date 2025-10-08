@@ -6,17 +6,13 @@ import threading
 import time
 import os
 
-# ----------------------------
-# 페이지 설정
-# ----------------------------
 st.set_page_config(page_title="ROS2 알림 모니터", layout="wide")
 st.title("📡 ROS2 → MQTT 알림 모니터링")
 
 # ----------------------------
-# 로컬 IP 자동 감지 함수
+# 로컬 IP 자동 감지
 # ----------------------------
 def get_local_ip():
-    """현재 장치의 내부 네트워크 IP 자동 감지"""
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(("8.8.8.8", 80))
@@ -27,26 +23,25 @@ def get_local_ip():
     return ip
 
 # ----------------------------
-# 고정 IP 설정 및 파일 저장
+# 설정 파일 저장/불러오기
 # ----------------------------
 CONFIG_PATH = os.path.expanduser("~/.mqtt_config.json")
 
 def load_broker_ip():
-    """저장된 브로커 IP 불러오기"""
     if os.path.exists(CONFIG_PATH):
         try:
             with open(CONFIG_PATH, "r") as f:
-                data = json.load(f)
-                return data.get("broker_ip", get_local_ip())
+                return json.load(f).get("broker_ip", get_local_ip())
         except Exception:
             return get_local_ip()
-    else:
-        return get_local_ip()
+    return get_local_ip()
 
 def save_broker_ip(ip):
-    """브로커 IP를 JSON 파일로 저장"""
-    with open(CONFIG_PATH, "w") as f:
-        json.dump({"broker_ip": ip}, f)
+    try:
+        with open(CONFIG_PATH, "w") as f:
+            json.dump({"broker_ip": ip}, f)
+    except Exception:
+        pass
 
 # ----------------------------
 # 세션 상태 초기화
@@ -58,11 +53,10 @@ if "connected" not in st.session_state:
 if "topic" not in st.session_state:
     st.session_state["topic"] = "robot/alerts"
 
-# MQTT 콜백 외부에서 접근할 버퍼
 message_buffer = []
 
 # ----------------------------
-# MQTT 콜백 함수
+# MQTT 콜백
 # ----------------------------
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
@@ -73,7 +67,6 @@ def on_connect(client, userdata, flags, rc):
         print(f"❌ MQTT 연결 실패 (코드: {rc})")
 
 def on_message(client, userdata, msg):
-    """MQTT 수신 콜백"""
     try:
         data = msg.payload.decode()
         parsed = json.loads(data)
@@ -86,23 +79,29 @@ def on_message(client, userdata, msg):
 # MQTT 연결 함수
 # ----------------------------
 def connect_mqtt(ip, port, topic):
-    client = mqtt.Client(callback_api_version=5, userdata={"topic": topic})
+    # ✅ 버전 호환성 처리
+    try:
+        client = mqtt.Client(userdata={"topic": topic})
+    except TypeError:
+        # 일부 환경에서는 callback_api_version 필요
+        client = mqtt.Client(callback_api_version=4, userdata={"topic": topic})
+
     client.on_connect = on_connect
     client.on_message = on_message
 
     try:
-        client.connect(ip, port, 60)
+        client.connect(ip, int(port), 60)
         client.loop_start()
         st.session_state["connected"] = True
         st.session_state["client"] = client
         st.toast(f"✅ MQTT 브로커 연결 성공 ({ip}:{port})", icon="🟢")
-        save_broker_ip(ip)  # 💾 연결된 IP 자동 저장
+        save_broker_ip(ip)
     except Exception as e:
         st.session_state["connected"] = False
         st.error(f"❌ MQTT 연결 실패: {e}")
 
 # ----------------------------
-# 사이드바 설정
+# 사이드바
 # ----------------------------
 st.sidebar.header("⚙️ MQTT 설정")
 st.sidebar.caption("Jetson Orin에서 실행 중인 MQTT 브로커에 연결합니다.")
@@ -118,32 +117,25 @@ if save_btn:
     connect_mqtt(broker_ip, port, topic)
 
 # ----------------------------
-# 연결 상태 표시
+# UI 표시
 # ----------------------------
 st.markdown(f"**📡 현재 브로커:** `{st.session_state['broker_ip']}:{port}`")
 st.markdown(f"**🔌 연결 상태:** {'🟢 연결됨' if st.session_state['connected'] else '🔴 끊김'}")
-
 st.divider()
 st.subheader("📨 실시간 알림 내역")
 
 placeholder = st.empty()
 
-# ----------------------------
-# 감지 조건 + UI 갱신 쓰레드
-# ----------------------------
 def update_ui():
     while True:
         if message_buffer:
             msg = message_buffer.pop(0)
             msg_type = msg.get("type", "info")
             message = msg.get("message", "")
-
-            # 🚨 조건부 표시
             if msg_type in ["intruder", "fire", "gas"]:
                 placeholder.error(f"🚨 [{msg_type.upper()}] {message}")
             else:
                 placeholder.info(f"✅ 정상 상태 ({msg_type})")
-
             st.experimental_rerun()
         time.sleep(0.5)
 
