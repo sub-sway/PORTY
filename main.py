@@ -4,50 +4,18 @@ import json
 import socket
 import threading
 import time
-import os
 
 st.set_page_config(page_title="ROS2 알림 모니터", layout="wide")
 st.title("📡 ROS2 → MQTT 알림 모니터링")
 
 # ----------------------------
-# 로컬 IP 자동 감지
-# ----------------------------
-def get_local_ip():
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
-        s.close()
-    except Exception:
-        ip = "127.0.0.1"
-    return ip
-
-# ----------------------------
-# 설정 파일 저장/불러오기
-# ----------------------------
-CONFIG_PATH = os.path.expanduser("~/.mqtt_config.json")
-
-def load_broker_ip():
-    if os.path.exists(CONFIG_PATH):
-        try:
-            with open(CONFIG_PATH, "r") as f:
-                return json.load(f).get("broker_ip", get_local_ip())
-        except Exception:
-            return get_local_ip()
-    return get_local_ip()
-
-def save_broker_ip(ip):
-    try:
-        with open(CONFIG_PATH, "w") as f:
-            json.dump({"broker_ip": ip}, f)
-    except Exception:
-        pass
-
-# ----------------------------
 # 세션 상태 초기화
 # ----------------------------
+# ✅ 브로커 IP를 직접 고정 (여기만 바꾸면 됨)
+FIXED_BROKER_IP = "192.168.0.108"
+
 if "broker_ip" not in st.session_state:
-    st.session_state["broker_ip"] = load_broker_ip()
+    st.session_state["broker_ip"] = FIXED_BROKER_IP
 if "connected" not in st.session_state:
     st.session_state["connected"] = False
 if "topic" not in st.session_state:
@@ -79,11 +47,9 @@ def on_message(client, userdata, msg):
 # MQTT 연결 함수
 # ----------------------------
 def connect_mqtt(ip, port, topic):
-    # ✅ 버전 호환성 처리
     try:
         client = mqtt.Client(userdata={"topic": topic})
     except TypeError:
-        # 일부 환경에서는 callback_api_version 필요
         client = mqtt.Client(callback_api_version=4, userdata={"topic": topic})
 
     client.on_connect = on_connect
@@ -95,7 +61,6 @@ def connect_mqtt(ip, port, topic):
         st.session_state["connected"] = True
         st.session_state["client"] = client
         st.toast(f"✅ MQTT 브로커 연결 성공 ({ip}:{port})", icon="🟢")
-        save_broker_ip(ip)
     except Exception as e:
         st.session_state["connected"] = False
         st.error(f"❌ MQTT 연결 실패: {e}")
@@ -106,12 +71,13 @@ def connect_mqtt(ip, port, topic):
 st.sidebar.header("⚙️ MQTT 설정")
 st.sidebar.caption("Jetson Orin에서 실행 중인 MQTT 브로커에 연결합니다.")
 
-broker_ip = st.sidebar.text_input("브로커 IP", st.session_state["broker_ip"])
+# ✅ IP는 고정값 사용
+broker_ip = FIXED_BROKER_IP
 port = st.sidebar.number_input("포트 번호", min_value=1, max_value=65535, value=1883)
 topic = st.sidebar.text_input("토픽", st.session_state["topic"])
-save_btn = st.sidebar.button("💾 설정 저장 및 연결")
+connect_btn = st.sidebar.button("💾 연결")
 
-if save_btn:
+if connect_btn:
     st.session_state["broker_ip"] = broker_ip
     st.session_state["topic"] = topic
     connect_mqtt(broker_ip, port, topic)
@@ -119,7 +85,7 @@ if save_btn:
 # ----------------------------
 # UI 표시
 # ----------------------------
-st.markdown(f"**📡 현재 브로커:** `{st.session_state['broker_ip']}:{port}`")
+st.markdown(f"**📡 현재 브로커:** `{broker_ip}:{port}`")
 st.markdown(f"**🔌 연결 상태:** {'🟢 연결됨' if st.session_state['connected'] else '🔴 끊김'}")
 st.divider()
 st.subheader("📨 실시간 알림 내역")
