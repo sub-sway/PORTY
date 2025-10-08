@@ -59,7 +59,7 @@ def on_message(client, userdata, msg):
 # MQTT 자동 연결
 # ===============================
 def connect_mqtt():
-    client = mqtt.Client()
+    client = mqtt.Client(callback_api_version=mqtt.CallbackAPIVersion.VERSION2)
     client.username_pw_set(USERNAME, PASSWORD)
     client.tls_set(cert_reqs=ssl.CERT_NONE)
     client.on_connect = on_connect
