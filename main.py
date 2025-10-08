@@ -18,14 +18,15 @@ st.set_page_config(page_title="항만시설 안전 지킴이 대시보드", layo
 st.title("🛡️ 항만시설 현장 안전 모니터링 (HiveMQ Cloud)")
 
 # ===============================
-# 세션 상태 초기화
+# 세션 상태 초기화 (안전하게 보장)
 # ===============================
 if "connected" not in st.session_state:
     st.session_state["connected"] = False
 if "connecting" not in st.session_state:
     st.session_state["connecting"] = True
-if "messages" not in st.session_state:
-    st.session_state["messages"] = []
+
+# ✅ 전역 메시지 버퍼 (스레드 안전)
+messages_buffer = []
 
 # ===============================
 # MQTT 콜백 정의
@@ -47,12 +48,12 @@ def on_message(client, userdata, msg):
     except:
         data = {"type": "unknown", "message": msg.payload.decode()}
 
-    # ✅ 정상 상태는 표시하지 않음
+    # ✅ 정상 상태 제외
     if data.get("type") not in ["fire", "safety"]:
         return
 
-    st.session_state["messages"].insert(0, data)
-    print(f"📩 수신: {data}")
+    messages_buffer.insert(0, data)  # 새 메시지 맨 위로 추가
+    print(f"📩 MQTT 수신: {data}")
 
 # ===============================
 # MQTT 자동 연결
@@ -63,18 +64,16 @@ def connect_mqtt():
     client.tls_set(cert_reqs=ssl.CERT_NONE)
     client.on_connect = on_connect
     client.on_message = on_message
-
     try:
         client.connect(BROKER, PORT, 60)
         client.loop_start()
-        st.session_state["client"] = client
-        print("🟡 MQTT 연결 시도 중...")
+        print("🟡 HiveMQ Cloud 연결 시도 중...")
     except Exception as e:
         st.session_state["connecting"] = False
-        st.error(f"❌ MQTT 연결 실패: {e}")
+        print(f"❌ MQTT 연결 실패: {e}")
 
-# 앱 시작 시 자동 연결
-if "client" not in st.session_state:
+# ✅ 앱 시작 시 자동 연결
+if not st.session_state["connected"] and st.session_state["connecting"]:
     threading.Thread(target=connect_mqtt, daemon=True).start()
 
 # ===============================
@@ -90,11 +89,11 @@ else:
 st.divider()
 st.subheader("📡 실시간 경보 내역")
 
-# ===============================
-# 메시지 표시 UI
-# ===============================
 placeholder = st.empty()
 
+# ===============================
+# 메시지 렌더링 함수
+# ===============================
 def render_message(msg):
     msg_type = msg.get("type", "info")
     message = msg.get("message", "")
@@ -106,17 +105,17 @@ def render_message(msg):
     elif msg_type == "safety":
         st.warning(f"⚠ **안전조끼 미착용** {message}\n🕓 {timestamp}\n📍 {source}")
 
+# ===============================
+# UI 업데이트 스레드 (session_state 접근 금지)
+# ===============================
 def update_ui():
     while True:
-        if st.session_state["messages"]:
+        if messages_buffer:
             with placeholder.container():
-                for msg in st.session_state["messages"][:10]:
+                for msg in messages_buffer[:10]:  # 최근 10개 표시
                     render_message(msg)
         time.sleep(0.5)
 
-# ===============================
-# 백그라운드 UI 업데이트 스레드
-# ===============================
 threading.Thread(target=update_ui, daemon=True).start()
 
 st.caption("Jetson Orin이 HiveMQ Cloud로 발행한 이상 상태만 실시간 표시합니다.")
