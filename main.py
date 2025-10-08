@@ -4,6 +4,7 @@ import json
 import socket
 import threading
 import time
+import os
 
 # ----------------------------
 # 페이지 설정
@@ -15,26 +16,49 @@ st.title("📡 ROS2 → MQTT 알림 모니터링")
 # 로컬 IP 자동 감지 함수
 # ----------------------------
 def get_local_ip():
+    """현재 장치의 내부 네트워크 IP 자동 감지"""
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(("8.8.8.8", 80))
         ip = s.getsockname()[0]
         s.close()
-    except:
+    except Exception:
         ip = "127.0.0.1"
     return ip
+
+# ----------------------------
+# 고정 IP 설정 및 파일 저장
+# ----------------------------
+CONFIG_PATH = os.path.expanduser("~/.mqtt_config.json")
+
+def load_broker_ip():
+    """저장된 브로커 IP 불러오기"""
+    if os.path.exists(CONFIG_PATH):
+        try:
+            with open(CONFIG_PATH, "r") as f:
+                data = json.load(f)
+                return data.get("broker_ip", get_local_ip())
+        except Exception:
+            return get_local_ip()
+    else:
+        return get_local_ip()
+
+def save_broker_ip(ip):
+    """브로커 IP를 JSON 파일로 저장"""
+    with open(CONFIG_PATH, "w") as f:
+        json.dump({"broker_ip": ip}, f)
 
 # ----------------------------
 # 세션 상태 초기화
 # ----------------------------
 if "broker_ip" not in st.session_state:
-    st.session_state["broker_ip"] = get_local_ip()
+    st.session_state["broker_ip"] = load_broker_ip()
 if "connected" not in st.session_state:
     st.session_state["connected"] = False
 if "topic" not in st.session_state:
     st.session_state["topic"] = "robot/alerts"
 
-# ✅ MQTT 콜백에서 안전하게 쓸 별도 리스트 (스레드 공유용)
+# MQTT 콜백 외부에서 접근할 버퍼
 message_buffer = []
 
 # ----------------------------
@@ -49,13 +73,13 @@ def on_connect(client, userdata, flags, rc):
         print(f"❌ MQTT 연결 실패 (코드: {rc})")
 
 def on_message(client, userdata, msg):
-    """MQTT 수신 콜백 (Streamlit과 분리된 스레드에서 실행됨)"""
+    """MQTT 수신 콜백"""
     try:
         data = msg.payload.decode()
         parsed = json.loads(data)
     except:
         parsed = {"message": msg.payload.decode()}
-    message_buffer.append(parsed)  # ✅ st.session_state 대신 버퍼에 추가
+    message_buffer.append(parsed)
     print(f"📩 MQTT 수신: {parsed}")
 
 # ----------------------------
@@ -72,6 +96,7 @@ def connect_mqtt(ip, port, topic):
         st.session_state["connected"] = True
         st.session_state["client"] = client
         st.toast(f"✅ MQTT 브로커 연결 성공 ({ip}:{port})", icon="🟢")
+        save_broker_ip(ip)  # 💾 연결된 IP 자동 저장
     except Exception as e:
         st.session_state["connected"] = False
         st.error(f"❌ MQTT 연결 실패: {e}")
@@ -101,21 +126,27 @@ st.markdown(f"**🔌 연결 상태:** {'🟢 연결됨' if st.session_state['con
 st.divider()
 st.subheader("📨 실시간 알림 내역")
 
-# ----------------------------
-# 실시간 표시 갱신 쓰레드
-# ----------------------------
 placeholder = st.empty()
 
+# ----------------------------
+# 감지 조건 + UI 갱신 쓰레드
+# ----------------------------
 def update_ui():
-    """백그라운드에서 MQTT 버퍼를 계속 반영"""
     while True:
         if message_buffer:
             msg = message_buffer.pop(0)
-            placeholder.warning(f"🚨 [{msg.get('type', '알림')}] {msg.get('message', '')}")
+            msg_type = msg.get("type", "info")
+            message = msg.get("message", "")
+
+            # 🚨 조건부 표시
+            if msg_type in ["intruder", "fire", "gas"]:
+                placeholder.error(f"🚨 [{msg_type.upper()}] {message}")
+            else:
+                placeholder.info(f"✅ 정상 상태 ({msg_type})")
+
+            st.experimental_rerun()
         time.sleep(0.5)
 
-# ✅ 별도 쓰레드로 UI 갱신 루프 실행
 threading.Thread(target=update_ui, daemon=True).start()
 
-# 안내 메시지
 st.info("MQTT 메시지를 수신하면 자동으로 화면에 표시됩니다.")
