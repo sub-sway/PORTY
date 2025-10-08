@@ -62,7 +62,7 @@ def on_message(client, userdata, msg):
 # MQTT 연결 함수
 # ----------------------------
 def connect_mqtt(ip, port, topic):
-    client = mqtt.Client(userdata={"topic": topic})
+    client = mqtt.Client(callback_api_version=5, userdata={"topic": topic})
     client.on_connect = on_connect
     client.on_message = on_message
 
