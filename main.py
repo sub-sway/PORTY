@@ -69,7 +69,7 @@ def setup_mqtt_client():
     client.enable_logger(logger)
     
     client.username_pw_set(USERNAME, PASSWORD)
-    client.tls_set(cert_reqs=ssl.CERT_NONE)
+    #client.tls_set(cert_reqs=ssl.CERT_NONE)
     client.on_connect = on_connect
     client.on_message = on_message
     
