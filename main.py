@@ -5,6 +5,7 @@ import ssl
 import threading
 import time
 import warnings
+from streamlit_autorefresh import st_autorefresh
 
 # "missing ScriptRunContext!" 경고 무시
 warnings.filterwarnings("ignore", message="missing ScriptRunContext!")
