@@ -7,8 +7,7 @@ import queue
 import pandas as pd
 import datetime
 import random
-# [핵심 수정 1] st_autorefresh는 더 이상 필요 없으므로 import 문을 제거합니다.
-# from streamlit_autorefresh import st_autorefresh
+from streamlit_autorefresh import st_autorefresh
 import logging
 import sys
 
@@ -17,7 +16,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 if not logger.handlers:
     handler = logging.StreamHandler(sys.stdout)
-    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s', datefmt='%Y-m-%d %H:%M:%S')
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 
@@ -33,12 +32,19 @@ HIVE_TOPIC = "robot/alerts"
 DB_NAME = "AlertDB"
 COLLECTION_NAME = "AlertData"
 
-MESSAGE_QUEUE = queue.Queue()
+# [핵심 수정 1] 전역 큐 선언을 제거합니다.
+# MESSAGE_QUEUE = queue.Queue()
 
 # --- 페이지 설정 ---
 st.set_page_config(page_title="안전 모니터링 대시보드", layout="wide")
 st.title("🛡️ 항만시설 현장 안전 모니터링")
 logger.info("================ 스트림릿 앱 시작 ================")
+
+# --- [핵심 수정 2] 큐(Queue)를 캐시하여 앱 재실행 시에도 유지되도록 합니다. ---
+@st.cache_resource
+def get_message_queue():
+    """앱 전체의 생명주기 동안 단 하나만 존재하는 큐를 생성하고 반환합니다."""
+    return queue.Queue()
 
 # --- MongoDB & MQTT 클라이언트 연결 ---
 @st.cache_resource
@@ -57,6 +63,9 @@ def get_db_collection():
 
 @st.cache_resource
 def start_mqtt_client():
+    # [핵심 수정 3] 캐시된 큐를 가져와서 on_message 함수에서 사용합니다.
+    message_queue = get_message_queue()
+
     def on_connect(client, userdata, flags, rc, properties=None):
         if rc == 0:
             logger.info(f"MQTT 브로커 연결 성공. 토픽 구독: '{HIVE_TOPIC}'")
@@ -70,7 +79,7 @@ def start_mqtt_client():
             logger.info(f"MQTT 메시지 수신 (토픽: '{msg.topic}'): {payload}")
             data = json.loads(payload)
             if all(key in data for key in ['type', 'message', 'timestamp']):
-                MESSAGE_QUEUE.put(data)
+                message_queue.put(data) # 캐시된 큐에 데이터 삽입
                 logger.info("유효한 메시지를 큐에 추가했습니다.")
             else:
                 logger.warning(f"메시지 형식 오류 (필수 키 누락): {data}")
@@ -93,9 +102,11 @@ def start_mqtt_client():
         logger.error(f"MQTT 연결 실패: {e}")
         return None
 
-# --- 클라이언트 실행 및 세션 상태 초기화 ---
+# --- 클라이언트 및 큐 실행/초기화 ---
 db_collection = get_db_collection()
 mqtt_client = start_mqtt_client()
+# [핵심 수정 4] 메인 로직에서도 캐시된 큐를 사용합니다.
+message_queue = get_message_queue()
 
 if "latest_alerts" not in st.session_state:
     st.session_state.latest_alerts = []
@@ -104,8 +115,8 @@ if "current_status" not in st.session_state:
 
 # --- 메인 로직 ---
 if db_collection is not None:
-    while not MESSAGE_QUEUE.empty():
-        msg = MESSAGE_QUEUE.get()
+    while not message_queue.empty(): # 캐시된 큐를 확인
+        msg = message_queue.get()    # 캐시된 큐에서 데이터를 가져옴
         logger.info(f"큐에서 메시지 처리 시작: {msg.get('type')}")
         
         if msg.get("type") == "normal":
@@ -170,13 +181,11 @@ else:
         "timestamp": "발생 시각", "type": "유형", "message": "메시지"
     })
     
-    # [핵심 수정 2] 경고 메시지에 따라 use_container_width=True를 width='stretch'로 변경
     st.dataframe(
         display_df[['발생 시각', '유형', '메시지']].sort_values(by="발생 시각", ascending=False),
         width='stretch',
         hide_index=True
     )
 
-# [핵심 수정 1] 불필요한 재시작의 원인이었던 st_autorefresh를 완전히 제거합니다.
-# st_autorefresh(interval=2000, key="ui_refresher")
+st_autorefresh(interval=2000, key="ui_refresher")
 
