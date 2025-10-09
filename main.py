@@ -22,6 +22,21 @@ MESSAGE_QUEUE = queue.Queue()
 st.set_page_config(page_title="항만시설 안전 지킴이 대시보드", layout="wide")
 st.title("🛡️ 항만시설 현장 안전 모니터링 (HiveMQ Cloud)")
 
+# ▼▼▼ 디버깅을 위해 이 블록을 추가 ▼▼▼
+with st.expander("🐞 디버깅 정보 확인"):
+    st.write("--- 연결에 사용되는 실제 값 ---")
+    try:
+        st.write(f"BROKER: `{st.secrets['HIVE_BROKER']}`")
+        st.write(f"USERNAME: `{st.secrets['HIVE_USERNAME']}`")
+        # 비밀번호는 보안을 위해 길이만 표시
+        st.write(f"PASSWORD: `{'*' * len(st.secrets['HIVE_PASSWORD'])}`")
+    except KeyError as e:
+        st.error(f"secrets.toml 파일에서 키를 찾을 수 없습니다: {e}")
+    
+    st.write(f"PORT: `{PORT}`")
+    st.write(f"TOPIC: `{TOPIC}`")
+    st.write(f"TRANSPORT: `websockets`")
+
 # --- 세션 상태 초기화 ---
 # 이제 큐(queue)는 여기서 관리하지 않습니다.
 if "alerts" not in st.session_state:
