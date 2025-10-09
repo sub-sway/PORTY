@@ -4,6 +4,7 @@ import json
 import ssl
 import threading
 import time
+from streamlit_autorefresh import st_autorefresh
 
 # ===============================
 # HiveMQ Cloud 설정
@@ -121,9 +122,6 @@ def render_alerts():
                 st.info(f"ℹ️ {message}")
 
 # ===============================
-# Streamlit rerun 루프
+# 주기적 UI 새로고침 (1초마다)
 # ===============================
-while True:
-    render_alerts()
-    time.sleep(1)
-    st.rerun()
+st_autorefresh(interval=1000, key="auto_refresh")
