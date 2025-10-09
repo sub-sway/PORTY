@@ -4,36 +4,25 @@ import json
 import ssl
 import threading
 import time
-from streamlit_autorefresh import st_autorefresh
 
-# ===============================
 # HiveMQ Cloud 설정
-# ===============================
 BROKER = "8e008ba716c74e97a3c1588818ddb209.s1.eu.hivemq.cloud"
 PORT = 8883
 USERNAME = "JetsonOrin"
 PASSWORD = "One24511"
 TOPIC = "robot/alerts"
 
-# ===============================
 # Streamlit 기본 설정
-# ===============================
 st.set_page_config(page_title="항만시설 안전 지킴이 대시보드", layout="wide")
 st.title("🛡️ 항만시설 현장 안전 모니터링 (HiveMQ Cloud)")
 
-# ===============================
 # 세션 상태 초기화
-# ===============================
 if "connected" not in st.session_state:
     st.session_state["connected"] = False
 if "alerts" not in st.session_state:
     st.session_state["alerts"] = []
-if "mqtt_client" not in st.session_state:
-    st.session_state["mqtt_client"] = None
 
-# ===============================
 # MQTT 콜백 함수
-# ===============================
 def on_connect(client, userdata, flags, rc, properties=None):
     """MQTT 연결 콜백"""
     if rc == 0:
@@ -62,9 +51,7 @@ def on_message(client, userdata, msg):
         })
         print(f"📩 수신: {data}")
 
-# ===============================
 # MQTT 연결 함수
-# ===============================
 def connect_mqtt():
     """HiveMQ Cloud 연결"""
     client = mqtt.Client(callback_api_version=mqtt.CallbackAPIVersion.VERSION2)
@@ -76,32 +63,26 @@ def connect_mqtt():
     try:
         client.connect(BROKER, PORT, 60)
         client.loop_start()
-        st.session_state["mqtt_client"] = client
         print("🟡 HiveMQ Cloud 연결 시도 중...")
     except Exception as e:
         st.session_state["connected"] = False
         print(f"❌ MQTT 연결 실패: {e}")
 
-# ===============================
 # 연결 스레드 시작 (1회만 실행)
-# ===============================
-if st.session_state["mqtt_client"] is None:
-    threading.Thread(target=connect_mqtt, daemon=True).start()
-
-# ===============================
-# UI 표시
-# ===============================
 if not st.session_state["connected"]:
-    st.warning("🔄 HiveMQ Cloud 연결 중... (약간의 시간이 걸릴 수 있습니다.)")
-else:
+    with st.spinner("🔄 연결 중..."):
+        threading.Thread(target=connect_mqtt, daemon=True).start()
+
+# UI 표시
+if st.session_state["connected"]:
     st.success("🟢 HiveMQ Cloud 연결됨")
+else:
+    st.warning("🔄 HiveMQ Cloud 연결 중...")
 
 st.divider()
 st.subheader("📡 실시간 경보 내역")
 
-# ===============================
 # 실시간 UI 업데이트
-# ===============================
 alert_placeholder = st.empty()
 
 def render_alerts():
@@ -121,7 +102,6 @@ def render_alerts():
             else:
                 st.info(f"ℹ️ {message}")
 
-# ===============================
-# 주기적 UI 새로고침 (1초마다)
-# ===============================
-st_autorefresh(interval=1000, key="auto_refresh")
+# 주기적 UI 새로고침
+time.sleep(1)
+st.experimental_rerun()
