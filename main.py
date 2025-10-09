@@ -4,6 +4,7 @@ import json
 import ssl
 import queue
 import datetime
+import logging
 from streamlit_autorefresh import st_autorefresh
 
 # --- 설정 ---
@@ -68,6 +69,19 @@ def on_message(client, userdata, msg):
 
 # --- MQTT 클라이언트 설정 ---
 def setup_mqtt_client():
+
+    # ▼▼▼ 상세 로그 출력을 위해 이 블록을 추가 ▼▼▼
+    logging.basicConfig(level=logging.INFO,
+                        format='%(asctime)s - %(levelname)s - %(message)s')
+    logger = logging.getLogger(__name__)
+    # ▲▲▲ 여기까지 추가 ▲▲▲
+
+    client = mqtt.Client(callback_api_version=mqtt.CallbackAPIVersion.VERSION2, transport="websockets")
+    
+    # ▼▼▼ 클라이언트에 로거 연결 ▼▼▼
+    client.enable_logger(logger)
+    # ▲▲▲ 여기까지 추가 ▲▲▲
+    
     client = mqtt.Client(callback_api_version=mqtt.CallbackAPIVersion.VERSION2, transport="websockets")
     client.username_pw_set(USERNAME, PASSWORD)
     client.tls_set(cert_reqs=ssl.CERT_NONE)
