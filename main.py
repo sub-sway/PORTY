@@ -5,6 +5,7 @@ import ssl
 import queue
 import datetime
 import logging
+import sys
 from streamlit_autorefresh import st_autorefresh
 
 # --- 설정 ---
@@ -70,9 +71,15 @@ def on_message(client, userdata, msg):
 # --- MQTT 클라이언트 설정 ---
 def setup_mqtt_client():
 
-    # ▼▼▼ 상세 로그 출력을 위해 이 블록을 추가 ▼▼▼
-    logging.basicConfig(level=logging.INFO,
-                        format='%(asctime)s - %(levelname)s - %(message)s')
+
+    # ▼▼▼ Streamlit Cloud 로그 뷰어에 직접 표시되도록 수정 ▼▼▼
+    logging.basicConfig(
+        level=logging.INFO,
+        stream=sys.stdout,  # 로그를 파일 대신 표준 출력(콘솔)으로 보냄
+        force=True,         # Streamlit이 선점한 로거를 덮어쓰기 위함
+        format='%(asctime)s - %(levelname)s - %(message)s'
+    )
+    # ▲▲▲ 수정 완료 ▲▲▲
     logger = logging.getLogger(__name__)
     # ▲▲▲ 여기까지 추가 ▲▲▲
 
