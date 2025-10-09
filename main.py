@@ -7,9 +7,10 @@ import queue
 import pandas as pd
 import datetime
 import random
-from streamlit_autorefresh import st_autorefresh
+# [핵심 수정 1] st_autorefresh는 더 이상 필요 없으므로 import 문을 제거합니다.
+# from streamlit_autorefresh import st_autorefresh
 import logging
-import sys # sys 모듈 추가
+import sys
 
 # --- 로거 설정 ---
 logger = logging.getLogger(__name__)
@@ -32,7 +33,6 @@ HIVE_TOPIC = "robot/alerts"
 DB_NAME = "AlertDB"
 COLLECTION_NAME = "AlertData"
 
-# 스레드 간 데이터 전달을 위한 전역 큐
 MESSAGE_QUEUE = queue.Queue()
 
 # --- 페이지 설정 ---
@@ -109,13 +109,11 @@ if db_collection is not None:
         logger.info(f"큐에서 메시지 처리 시작: {msg.get('type')}")
         
         if msg.get("type") == "normal":
-            logger.info("'normal' 타입 메시지입니다. 현재 상태를 업데이트합니다.")
             st.session_state.current_status = msg
             continue
 
         if 'source_ip' in msg:
             del msg['source_ip']
-            logger.info("'source_ip' 필드를 제거했습니다.")
 
         try:
             msg['timestamp'] = datetime.datetime.strptime(msg['timestamp'], "%Y-%m-%d %H:%M:%S")
@@ -125,11 +123,9 @@ if db_collection is not None:
         st.session_state.latest_alerts.insert(0, msg)
         if len(st.session_state.latest_alerts) > 100:
             st.session_state.latest_alerts.pop()
-        logger.info(f"UI에 메시지를 즉시 반영했습니다: {msg.get('type')}")
         
         try:
             db_collection.insert_one(msg)
-            # [핵심 수정] 터미널 로그와 함께, 화면에도 저장 성공 알림을 띄웁니다.
             logger.info(f"메시지를 MongoDB에 성공적으로 저장했습니다.")
             alert_type = msg.get("type", "알 수 없음")
             st.toast(f"✅ '{alert_type}' 경보가 DB에 저장되었습니다.", icon="💾")
@@ -146,7 +142,6 @@ if not st.session_state.latest_alerts and db_collection is not None:
         logger.info(f"초기 데이터 {len(alerts)}건을 DB에서 로드했습니다.")
     except Exception as e:
         st.error(f"초기 데이터 로드 실패: {e}")
-        logger.error(f"초기 데이터 로드 실패: {e}")
 
 # --- UI 표시 ---
 col1, col2 = st.columns([3, 1])
@@ -175,10 +170,13 @@ else:
         "timestamp": "발생 시각", "type": "유형", "message": "메시지"
     })
     
+    # [핵심 수정 2] 경고 메시지에 따라 use_container_width=True를 width='stretch'로 변경
     st.dataframe(
         display_df[['발생 시각', '유형', '메시지']].sort_values(by="발생 시각", ascending=False),
-        use_container_width=True,
+        width='stretch',
         hide_index=True
     )
 
-st_autorefresh(interval=2000, key="ui_refresher")
+# [핵심 수정 1] 불필요한 재시작의 원인이었던 st_autorefresh를 완전히 제거합니다.
+# st_autorefresh(interval=2000, key="ui_refresher")
+
