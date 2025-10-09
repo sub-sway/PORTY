@@ -1,148 +1,133 @@
 import streamlit as st
 import paho.mqtt.client as mqtt
+import pymongo
 import json
 import ssl
-import queue  # queue 라이브러리는 그대로 import 합니다.
+import queue
+import pandas as pd
 import datetime
-import logging
 import random
 from streamlit_autorefresh import st_autorefresh
 
 # --- 설정 ---
-try:
-    BROKER = st.secrets["HIVE_BROKER"]
-    USERNAME = st.secrets["HIVE_USERNAME"]
-    PASSWORD = st.secrets["HIVE_PASSWORD"]
-except KeyError as e:
-    st.error(f"Streamlit Secrets 설정이 필요합니다. '.streamlit/secrets.toml' 파일에서 '{e}' 키를 찾을 수 없습니다.")
-    st.stop()
+# MQTT 설정
+HIVE_BROKER = st.secrets["HIVE_BROKER"]
+HIVE_USERNAME = st.secrets["HIVE_USERNAME"]
+HIVE_PASSWORD = st.secrets["HIVE_PASSWORD"]
+HIVE_PORT = 8884
+HIVE_TOPIC = "robot/alerts"
 
-PORT = 8884
-TOPIC = "robot/alerts"
-MAX_ALERTS_IN_MEMORY = 100
-UI_REFRESH_INTERVAL_MS = 1000
+# MongoDB 설정 (제공된 정보로 업데이트)
+MONGO_URI = st.secrets["MONGO_URI"]
+DB_NAME = "AlertDB"
+COLLECTION_NAME = "AlertData"
 
-### [수정 1] ###
-# 전역 변수로 선언했던 QUEUE를 제거합니다.
-# MESSAGE_QUEUE = queue.Queue()  <- 이 줄을 삭제
+# 스레드 간 데이터 전달을 위한 전역 큐
+MESSAGE_QUEUE = queue.Queue()
 
-# --- Streamlit 페이지 설정 ---
-st.set_page_config(page_title="항만시설 안전 지킴이 대시보드", layout="wide")
-st.title("🛡️ 항만시설 현장 안전 모니터링 (HiveMQ Cloud)")
+# --- 페이지 설정 ---
+st.set_page_config(page_title="안전 모니터링 대시보드", layout="wide")
+st.title("🛡️ 항만시설 현장 안전 모니터링")
 
-# --- 세션 상태 초기화 ---
-if "alerts" not in st.session_state:
-    st.session_state.alerts = []
-if "client" not in st.session_state:
-    st.session_state.client = None
-if "current_status" not in st.session_state:
-    st.session_state.current_status = {"message": "데이터 수신 대기 중...", "timestamp": "N/A"}
-if "raw_logs" not in st.session_state:
-    st.session_state.raw_logs = []
-
-### [수정 2] ###
-# message_queue를 session_state에 한 번만 초기화합니다.
-if "message_queue" not in st.session_state:
-    st.session_state.message_queue = queue.Queue()
-
-# --- MQTT 콜백 함수 ---
-def on_connect(client, userdata, flags, rc, properties=None):
-    if rc == 0:
-        client.subscribe(TOPIC)
-
-def on_message(client, userdata, msg, properties=None):
+# --- MongoDB & MQTT 클라이언트 연결 (Singleton으로 캐싱) ---
+@st.singleton
+def get_db_collection():
     try:
-        data = json.loads(msg.payload.decode())
-        ### [수정 3] ###
-        # session_state에 있는 큐에 데이터를 넣습니다.
-        st.session_state.message_queue.put(data)
-    except Exception:
-        error_data = {"type": "error", "message": "메시지 처리 오류", "raw_payload": msg.payload.decode(errors='ignore')}
-        st.session_state.message_queue.put(error_data)
+        client = pymongo.MongoClient(MONGO_URI)
+        client.server_info()
+        db = client[DB_NAME]
+        return db[COLLECTION_NAME]
+    except Exception as e:
+        st.error(f"MongoDB 연결 실패: {e}")
+        return None
 
-# --- MQTT 클라이언트 설정 ---
-def setup_mqtt_client():
-    client_id = f"streamlit-app-{random.randint(0, 1000)}"
-    client = mqtt.Client(client_id=client_id, callback_api_version=mqtt.CallbackAPIVersion.VERSION2, transport="websockets")
-    client.username_pw_set(USERNAME, PASSWORD)
+@st.singleton
+def start_mqtt_client():
+    def on_connect(client, userdata, flags, rc, properties=None):
+        if rc == 0:
+            client.subscribe(HIVE_TOPIC)
+
+    def on_message(client, userdata, msg):
+        try:
+            data = json.loads(msg.payload.decode())
+            # MongoDB는 UTC datetime 객체를 선호합니다.
+            data['timestamp'] = datetime.datetime.fromisoformat(data['timestamp'])
+            MESSAGE_QUEUE.put(data)
+        except Exception:
+            pass # 잘못된 형식의 메시지는 무시
+
+    client_id = f"streamlit-listener-{random.randint(0, 1000)}"
+    client = mqtt.Client(client_id=client_id, transport="websockets")
+    client.username_pw_set(HIVE_USERNAME, HIVE_PASSWORD)
     client.tls_set(cert_reqs=ssl.CERT_NONE)
     client.on_connect = on_connect
     client.on_message = on_message
-    
     try:
-        client.connect(BROKER, PORT, 60)
+        client.connect(HIVE_BROKER, HIVE_PORT, 60)
         client.loop_start()
         return client
     except Exception as e:
-        st.error(f"MQTT 연결 중 오류 발생: {e}")
+        st.error(f"MQTT 연결 실패: {e}")
         return None
 
-# --- 메인 애플리케이션 로직 ---
-if st.session_state.client is None:
-    st.session_state.client = setup_mqtt_client()
+# --- 클라이언트 실행 및 세션 상태 초기화 ---
+db_collection = get_db_collection()
+mqtt_client = start_mqtt_client()
 
-### [수정 4] ###
-# session_state에 저장된 큐를 사용합니다.
-while not st.session_state.message_queue.empty():
-    message = st.session_state.message_queue.get()
-    
-    st.session_state.raw_logs.append(message)
-    if len(st.session_state.raw_logs) > MAX_ALERTS_IN_MEMORY:
-        st.session_state.raw_logs.pop(0)
-    
-    msg_type = message.get("type")
-    
-    if msg_type == "normal":
-        st.session_state.current_status = message
-    elif msg_type in ["fire", "safety"]:
-        st.session_state.alerts.append(message)
-        if len(st.session_state.alerts) > MAX_ALERTS_IN_MEMORY:
-            st.session_state.alerts.pop(0)
+if "latest_alerts" not in st.session_state:
+    st.session_state.latest_alerts = []
 
-# --- UI 표시 (기존과 동일) ---
-if st.session_state.client and st.session_state.client.is_connected():
-    st.success("🟢 HiveMQ Cloud 연결됨")
+# --- 메인 로직 ---
+# 1. 큐에서 새 메시지를 가져와 DB에 저장하고, 화면에 표시할 리스트에 추가
+if db_collection:
+    while not MESSAGE_QUEUE.empty():
+        msg = MESSAGE_QUEUE.get()
+        try:
+            db_collection.insert_one(msg)
+            # 최신 메시지를 리스트 맨 앞에 추가
+            st.session_state.latest_alerts.insert(0, msg)
+            # 리스트 길이를 100으로 제한
+            if len(st.session_state.latest_alerts) > 100:
+                st.session_state.latest_alerts.pop()
+        except Exception as e:
+            st.warning(f"DB 저장 실패: {e}")
+
+# 2. (선택사항) 앱 시작 시 DB에서 최근 데이터 일부를 미리 로드
+if not st.session_state.latest_alerts and db_collection:
+    try:
+        alerts = list(db_collection.find().sort("timestamp", pymongo.DESCENDING).limit(50))
+        st.session_state.latest_alerts = alerts
+    except Exception as e:
+        st.error(f"초기 데이터 로드 실패: {e}")
+
+# --- UI 표시 ---
+if mqtt_client and mqtt_client.is_connected():
+    st.success("🟢 실시간 수신 중 (MQTT Connected)")
 else:
-    st.warning("🔄 HiveMQ Cloud에 연결 중이거나 연결에 실패했습니다.")
+    st.error("🔴 MQTT 연결 끊김")
 
 st.divider()
+st.subheader("🚨 최근 경보 내역")
 
-st.subheader("📡 시스템 현재 상태")
-status_message = st.session_state.current_status.get("message", "상태 정보 없음")
-status_time = st.session_state.current_status.get("timestamp", "N/A")
-
-try:
-    last_signal_time = datetime.datetime.strptime(status_time, "%Y-%m-%d %H:%M:%S")
-    time_diff_seconds = (datetime.datetime.now() - last_signal_time).total_seconds()
-    
-    if time_diff_seconds > 15:
-        st.error(f"❌ ROS2 노드 연결 끊김 의심 (마지막 신호: {status_time})")
-    else:
-        st.info(f"{status_message} (마지막 신호: {status_time})")
-except (ValueError, TypeError):
-    st.warning(f"{status_message}")
-
-st.divider()
-
-st.subheader("🚨 실시간 경보 내역")
-if not st.session_state.alerts:
-    st.info("현재 수신된 경보가 없습니다.")
+if not st.session_state.latest_alerts:
+    st.info("수신된 경보가 없습니다.")
 else:
-    for alert in reversed(st.session_state.alerts[-10:]):
-        msg_type = alert.get("type", "unknown")
-        message = alert.get("message", "내용 없음")
-        timestamp = alert.get("timestamp", "N/A")
-        source = alert.get("source_ip", "N/A")
-        
-        if msg_type == "fire":
-            st.error(f"🔥 **화재 경보!** - {message} (발생 시각: {timestamp}, 발생지: {source})")
-        elif msg_type == "safety":
-            st.warning(f"⚠️ **안전조끼 미착용** - {message} (발생 시각: {timestamp}, 발생지: {source})")
+    # Pandas DataFrame으로 변환하여 표시
+    df = pd.DataFrame(st.session_state.latest_alerts)
+    df['timestamp'] = pd.to_datetime(df['timestamp']).dt.tz_convert('Asia/Seoul')
+    
+    display_df = df.rename(columns={
+        "timestamp": "발생 시각", "type": "유형",
+        "message": "메시지", "source_ip": "발생지 IP"
+    })
+    
+    # 시간순으로 정렬하여 표시
+    st.dataframe(
+        display_df[['발생 시각', '유형', '메시지', '발생지 IP']].sort_values(by="발생 시각", ascending=False),
+        use_container_width=True,
+        hide_index=True
+    )
 
-with st.expander("🕵️ 전체 수신 로그 (디버깅용)"):
-    if not st.session_state.raw_logs:
-        st.write("수신된 메시지가 없습니다.")
-    else:
-        st.json(st.session_state.raw_logs[::-1])
+# 1초마다 화면을 새로고침하여 최신 데이터를 반영
+st_autorefresh(interval=1000, key="ui_refresher")
 
-st_autorefresh(interval=UI_REFRESH_INTERVAL_MS, key="auto_refresh")
