@@ -7,18 +7,14 @@ import datetime
 from streamlit_autorefresh import st_autorefresh
 
 # --- 설정 ---
-BROKER = "8e008ba716c74e97a3c1588818ddb209.s1.eu.hivemq.cloud"
-PORT = 8883
-USERNAME = "JetsonOrin"
-PASSWORD = "One24511"
+BROKER = st.secrets["HIVE_BROKER"]
+USERNAME = st.secrets["HIVE_USERNAME"]
+PASSWORD = st.secrets["HIVE_PASSWORD"]
+
+PORT = 8884
 TOPIC = "robot/alerts"
 MAX_ALERTS_IN_MEMORY = 100
 UI_REFRESH_INTERVAL_MS = 1000
-
-# ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-# [핵심 수정] 큐(Queue)를 st.session_state 밖의 독립적인 객체로 생성합니다.
-# 이렇게 하면 백그라운드 스레드가 st.session_state에 접근할 필요가 없어집니다.
-# ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
 MESSAGE_QUEUE = queue.Queue()
 
 
@@ -57,7 +53,7 @@ def on_message(client, userdata, msg):
 
 # --- MQTT 클라이언트 설정 ---
 def setup_mqtt_client():
-    client = mqtt.Client(callback_api_version=mqtt.CallbackAPIVersion.VERSION2)
+    client = mqtt.Client(callback_api_version=mqtt.CallbackAPIVersion.VERSION2, transport="websockets")
     client.username_pw_set(USERNAME, PASSWORD)
     client.tls_set(cert_reqs=ssl.CERT_NONE)
     client.on_connect = on_connect
