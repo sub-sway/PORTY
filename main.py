@@ -21,7 +21,7 @@ HIVE_PORT = 8884
 HIVE_TOPIC = "robot/alerts"
 # [수정] 요청하신 DB 및 컬렉션 이름으로 변경
 DB_NAME = "AlertDB"
-COLLECTION_NAME = "AlertDB"
+COLLECTION_NAME = "AlertData"
 
 # 스레드 간 데이터 전달을 위한 전역 큐
 MESSAGE_QUEUE = queue.Queue()
