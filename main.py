@@ -5,6 +5,10 @@ import ssl
 import threading
 import time
 from streamlit_autorefresh import st_autorefresh
+import warnings
+
+# "missing ScriptRunContext!" 경고 무시
+warnings.filterwarnings("ignore", message="missing ScriptRunContext!")
 
 # HiveMQ Cloud 설정
 BROKER = "8e008ba716c74e97a3c1588818ddb209.s1.eu.hivemq.cloud"
