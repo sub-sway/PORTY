@@ -4,6 +4,8 @@
 
 # Streamlit UI
 streamlit>=1.33.0
+streamlit-autorefresh
+
 
 # MQTT 통신
 paho-mqtt>=1.6.1
