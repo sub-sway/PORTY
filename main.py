@@ -1,11 +1,6 @@
 import streamlit as st
 import paho.mqtt.client as mqtt
-import json
-import ssl
-import queue
-import datetime
-import logging
-import sys
+import json, ssl, queue, datetime, logging, sys, random
 from streamlit_autorefresh import st_autorefresh
 
 # --- 설정 ---
@@ -63,17 +58,14 @@ def on_message(client, userdata, msg):
 
 # --- MQTT 클라이언트 설정 ---
 def setup_mqtt_client():
-    # Streamlit Cloud 로그 뷰어에 직접 표시되도록 설정
-    logging.basicConfig(
-        level=logging.INFO,
-        stream=sys.stdout,
-        force=True,
-        format='%(asctime)s - %(levelname)s - %(message)s'
-    )
+    # ... (logging 설정은 기존과 동일) ...
     logger = logging.getLogger(__name__)
     
-    # client를 한 번만 생성하고 로거를 적용
-    client = mqtt.Client(callback_api_version=mqtt.CallbackAPIVersion.VERSION2, transport="websockets")
+    # ★★★ 1. 고유 클라이언트 ID 생성 ★★★
+    client_id = f"streamlit-app-{random.randint(0, 1000)}"
+    
+    # ★★★ 2. 생성된 client_id를 인자로 전달 ★★★
+    client = mqtt.Client(client_id=client_id, callback_api_version=mqtt.CallbackAPIVersion.VERSION2, transport="websockets")
     client.enable_logger(logger)
     
     client.username_pw_set(USERNAME, PASSWORD)
