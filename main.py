@@ -19,8 +19,9 @@ MONGO_URI = st.secrets["MONGO_URI"]
 # MQTT 및 MongoDB 고정 설정
 HIVE_PORT = 8884
 HIVE_TOPIC = "robot/alerts"
-DB_NAME = "SensorDB"
-COLLECTION_NAME = "SensorData"
+# [수정] 요청하신 DB 및 컬렉션 이름으로 변경
+DB_NAME = "AlertDB"
+COLLECTION_NAME = "AlertDB"
 
 # 스레드 간 데이터 전달을 위한 전역 큐
 MESSAGE_QUEUE = queue.Queue()
@@ -50,9 +51,12 @@ def start_mqtt_client():
     def on_message(client, userdata, msg):
         try:
             data = json.loads(msg.payload.decode())
-            MESSAGE_QUEUE.put(data)
-        except json.JSONDecodeError:
-            pass # 잘못된 형식의 JSON 메시지는 무시
+            # [수정] 메시지에 필수 키가 모두 있는지 확인하여 데이터 무결성 강화
+            if all(key in data for key in ['type', 'message', 'timestamp']):
+                MESSAGE_QUEUE.put(data)
+        except (json.JSONDecodeError, TypeError):
+            # 잘못된 형식의 JSON이나 필수 키가 없는 메시지는 무시
+            pass
 
     client_id = f"streamlit-listener-{random.randint(0, 1000)}"
     client = mqtt.Client(client_id=client_id, transport="websockets", callback_api_version=mqtt.CallbackAPIVersion.VERSION2)
@@ -83,20 +87,20 @@ if db_collection is not None:
     while not MESSAGE_QUEUE.empty():
         msg = MESSAGE_QUEUE.get()
         
-        # [핵심 수정 1] 'normal' 타입 메시지는 DB에 저장하지 않고, 현재 상태만 업데이트
+        # 'normal' 타입 메시지는 DB에 저장하지 않고, 현재 상태만 업데이트
         if msg.get("type") == "normal":
             st.session_state.current_status = msg
-            continue # 다음 메시지 처리로 넘어감
+            continue
 
-        # [핵심 수정 2] DB에 저장하기 직전, 'source_ip' 필드를 제거
+        # DB에 저장하기 직전, 'source_ip' 필드를 제거
         if 'source_ip' in msg:
             del msg['source_ip']
 
-        # [핵심 수정 3] ROS2 노드가 보낸 문자열 타임스탬프를 datetime 객체로 변환
+        # ROS2 노드가 보낸 문자열 타임스탬프를 datetime 객체로 변환
         try:
             msg['timestamp'] = datetime.datetime.strptime(msg['timestamp'], "%Y-%m-%d %H:%M:%S")
         except (ValueError, TypeError):
-            msg['timestamp'] = datetime.datetime.now() # 변환 실패 시 현재 시간 사용
+            msg['timestamp'] = datetime.datetime.now()
 
         # DB에 저장 및 화면 표시용 리스트에 추가
         try:
@@ -107,10 +111,10 @@ if db_collection is not None:
         except Exception as e:
             st.warning(f"DB 저장 실패: {e}")
 
-# 앱 시작 시 DB에서 최근 경보 데이터 일부를 미리 로드 (상태 메시지 제외)
+# 앱 시작 시 DB에서 최근 경보 데이터 일부를 미리 로드
 if not st.session_state.latest_alerts and db_collection is not None:
     try:
-        query = {"type": {"$ne": "normal"}} # 'normal' 타입이 아닌 것만 조회
+        query = {"type": {"$ne": "normal"}}
         alerts = list(db_collection.find(query).sort("timestamp", pymongo.DESCENDING).limit(50))
         st.session_state.latest_alerts = alerts
     except Exception as e:
@@ -140,7 +144,7 @@ else:
     # MongoDB의 datetime을 한국 시간으로 변환
     df['timestamp'] = pd.to_datetime(df['timestamp']).dt.tz_localize('UTC').dt.tz_convert('Asia/Seoul')
     
-    # [핵심 수정 4] 화면 표시 컬럼에서 '발생지 IP' 제거
+    # 화면 표시 컬럼 이름 변경
     display_df = df.rename(columns={
         "timestamp": "발생 시각", "type": "유형", "message": "메시지"
     })
@@ -152,3 +156,4 @@ else:
     )
 
 st_autorefresh(interval=2000, key="ui_refresher")
+
