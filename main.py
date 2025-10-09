@@ -1,12 +1,21 @@
 import streamlit as st
 import paho.mqtt.client as mqtt
-import json, ssl, queue, datetime, logging, sys, random
+import json
+import ssl
+import queue
+import datetime
+import logging
+import random
 from streamlit_autorefresh import st_autorefresh
 
 # --- 설정 ---
-BROKER = st.secrets["HIVE_BROKER"]
-USERNAME = st.secrets["HIVE_USERNAME"]
-PASSWORD = st.secrets["HIVE_PASSWORD"]
+try:
+    BROKER = st.secrets["HIVE_BROKER"]
+    USERNAME = st.secrets["HIVE_USERNAME"]
+    PASSWORD = st.secrets["HIVE_PASSWORD"]
+except KeyError as e:
+    st.error(f"Streamlit Secrets 설정이 필요합니다. '.streamlit/secrets.toml' 파일에서 '{e}' 키를 찾을 수 없습니다.")
+    st.stop()
 
 PORT = 8884
 TOPIC = "robot/alerts"
@@ -16,29 +25,23 @@ MESSAGE_QUEUE = queue.Queue()
 
 
 # --- Streamlit 페이지 설정 ---
-st.set_page_config(page_title="항만시설 안전 지킴이 대시보드", layout="wide")
-st.title("🛡️ 항만시설 현장 안전 모니터링 (HiveMQ Cloud)")
+st.set_page_config(page_title="항만시설 안전 지킴이 대시보드 (디버깅 모드)", layout="wide")
+st.title("🛡️ 항만시설 현장 안전 모니터링 (수신 확인용)")
+st.warning("이 페이지는 MQTT 메시지 수신 여부를 확인하기 위한 디버깅용입니다.")
+
 
 # --- 디버깅 정보 확인 ---
-with st.expander("🐞 디버깅 정보 확인"):
-    st.write("--- 연결에 사용되는 실제 값 ---")
-    try:
-        st.write(f"BROKER: `{st.secrets['HIVE_BROKER']}`")
-        st.write(f"USERNAME: `{st.secrets['HIVE_USERNAME']}`")
-        st.write(f"PASSWORD: `{'*' * len(st.secrets['HIVE_PASSWORD'])}`")
-    except KeyError as e:
-        st.error(f"secrets.toml 파일 또는 Streamlit Cloud Secrets 설정에서 키를 찾을 수 없습니다: {e}")
+with st.expander("🐞 연결 정보 확인"):
+    st.write(f"BROKER: `{BROKER}`")
+    st.write(f"USERNAME: `{USERNAME}`")
+    st.write(f"PASSWORD: `{'*' * len(PASSWORD)}`")
     st.write(f"PORT: `{PORT}`")
     st.write(f"TOPIC: `{TOPIC}`")
-    st.write(f"TRANSPORT: `websockets`")
+
 
 # --- 세션 상태 초기화 ---
-if "alerts" not in st.session_state:
-    st.session_state.alerts = []
 if "client" not in st.session_state:
     st.session_state.client = None
-if "current_status" not in st.session_state:
-    st.session_state.current_status = {"message": "데이터 수신 대기 중...", "timestamp": "N/A"}
 if "raw_logs" not in st.session_state:
     st.session_state.raw_logs = []
 
@@ -46,27 +49,29 @@ if "raw_logs" not in st.session_state:
 # --- MQTT 콜백 함수 ---
 def on_connect(client, userdata, flags, rc, properties=None):
     if rc == 0:
+        print("[연결 성공] 토픽 구독을 시작합니다:", TOPIC)
         client.subscribe(TOPIC)
+    else:
+        print(f"[연결 실패] 코드: {rc}")
 
+### [핵심 수정] ###
+# JSON 파싱 없이 원본 메시지를 그대로 터미널에 출력하고 큐에 넣습니다.
 def on_message(client, userdata, msg, properties=None):
-    try:
-        data = json.loads(msg.payload.decode())
-        MESSAGE_QUEUE.put(data)
-    except Exception:
-        error_data = {"type": "error", "message": "메시지 처리 오류", "raw_payload": msg.payload.decode(errors='ignore')}
-        MESSAGE_QUEUE.put(error_data)
+    """메시지 수신 시 터미널에 출력하고, 원본 데이터를 큐에 추가합니다."""
+    raw_payload = msg.payload.decode(errors='ignore')
+    
+    # 1. 터미널에 즉시 출력 (가장 빠른 확인 방법)
+    print(f"--- MQTT 메시지 수신 (터미널) ---")
+    print(raw_payload)
+    print(f"------------------------------------")
+
+    # 2. 화면에 표시하기 위해 큐에 데이터 추가
+    MESSAGE_QUEUE.put(raw_payload)
 
 # --- MQTT 클라이언트 설정 ---
 def setup_mqtt_client():
-    # ... (logging 설정은 기존과 동일) ...
-    logger = logging.getLogger(__name__)
-    
-    # ★★★ 1. 고유 클라이언트 ID 생성 ★★★
-    client_id = f"streamlit-app-{random.randint(0, 1000)}"
-    
-    # ★★★ 2. 생성된 client_id를 인자로 전달 ★★★
+    client_id = f"streamlit-debug-app-{random.randint(0, 1000)}"
     client = mqtt.Client(client_id=client_id, callback_api_version=mqtt.CallbackAPIVersion.VERSION2, transport="websockets")
-    client.enable_logger(logger)
     
     client.username_pw_set(USERNAME, PASSWORD)
     client.tls_set(cert_reqs=ssl.CERT_NONE)
@@ -74,72 +79,45 @@ def setup_mqtt_client():
     client.on_message = on_message
     
     try:
+        print(f"{BROKER}:{PORT} 에 연결을 시도합니다...")
         client.connect(BROKER, PORT, 60)
         client.loop_start()
         return client
     except Exception as e:
-        logger.error(f"MQTT 연결 시도 중 예외 발생: {e}")
-        st.error(f"MQTT 연결 중 오류 발생: {e}")
+        st.error(f"MQTT 연결 중 심각한 오류 발생: {e}")
+        print(f"MQTT 연결 중 심각한 오류 발생: {e}")
         return None
 
 # --- 메인 애플리케이션 로직 ---
 if st.session_state.client is None:
     st.session_state.client = setup_mqtt_client()
 
+# 큐에 있는 메시지를 로그에 추가
 while not MESSAGE_QUEUE.empty():
-    message = MESSAGE_QUEUE.get()
+    raw_message_string = MESSAGE_QUEUE.get()
     
-    st.session_state.raw_logs.append(message)
+    # 타임스탬프와 함께 로그 저장
+    log_entry = f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {raw_message_string}"
+    st.session_state.raw_logs.append(log_entry)
+    
     if len(st.session_state.raw_logs) > MAX_ALERTS_IN_MEMORY:
         st.session_state.raw_logs = st.session_state.raw_logs[-MAX_ALERTS_IN_MEMORY:]
-    
-    msg_type = message.get("type")
-    
-    if msg_type == "normal":
-        st.session_state.current_status = message
-    elif msg_type in ["fire", "safety"]:
-        st.session_state.alerts.append(message)
-        if len(st.session_state.alerts) > MAX_ALERTS_IN_MEMORY:
-            st.session_state.alerts = st.session_state.alerts[-MAX_ALERTS_IN_MEMORY:]
 
 # --- UI 표시 ---
 if st.session_state.client and st.session_state.client.is_connected():
     st.success("🟢 HiveMQ Cloud 연결됨")
 else:
-    st.warning("🔄 HiveMQ Cloud에 연결 중이거나 연결에 실패했습니다.")
+    st.error("❌ HiveMQ Cloud에 연결되지 않았습니다. 터미널 로그와 secrets 설정을 확인하세요.")
 
 st.divider()
 
-st.subheader("📡 시스템 현재 상태")
-status_message = st.session_state.current_status.get("message", "상태 정보 없음")
-status_time = st.session_state.current_status.get("timestamp", "N/A")
-
-try:
-    last_signal_time = datetime.datetime.strptime(status_time, "%Y-%m-%d %H:%M:%S")
-    time_diff_seconds = (datetime.datetime.now() - last_signal_time).total_seconds()
-    
-    if time_diff_seconds > 15:
-        st.error(f"❌ ROS2 노드 연결 끊김 의심 (마지막 신호: {status_time})")
-    else:
-        st.success(f"{status_message} (마지막 신호: {status_time})")
-except (ValueError, TypeError):
-     st.warning(f"{status_message}")
-
-st.divider()
-
-st.subheader("🚨 실시간 경보 내역 (최근 10건)")
-if not st.session_state.alerts:
-    st.info("현재 수신된 경보가 없습니다.")
+### [핵심 수정] ###
+# 수신된 원본 메시지를 화면에 최우선으로 보여줍니다.
+st.subheader("🕵️ 수신된 전체 메시지 로그 (가장 먼저 여기를 확인하세요)")
+if not st.session_state.raw_logs:
+    st.info("아직 수신된 메시지가 없습니다. ROS2 노드가 실행 중인지, HiveMQ 웹소켓 클라이언트에 메시지가 보이는지 확인해주세요.")
 else:
-    for alert in reversed(st.session_state.alerts[-10:]):
-        msg_type = alert.get("type", "unknown"); message = alert.get("message", "내용 없음"); timestamp = alert.get("timestamp", "N/A"); source = alert.get("source_ip", "N/A")
-        if msg_type == "fire": st.error(f"🔥 **화재 경보!** {message}\n\n🕓 {timestamp}\n\n📍 {source}")
-        elif msg_type == "safety": st.warning(f"⚠️ **안전조끼 미착용** {message}\n\n🕓 {timestamp}\n\n📍 {source}")
-
-with st.expander("🕵️ 전체 수신 로그 (디버깅용)"):
-    if not st.session_state.raw_logs:
-        st.write("수신된 메시지가 없습니다.")
-    else:
-        st.json(st.session_state.raw_logs[::-1])
+    # st.json은 JSON이 아닐 경우 에러가 나므로, st.code 또는 st.text를 사용합니다.
+    st.code('\n'.join(st.session_state.raw_logs[::-1]), language='text')
 
 st_autorefresh(interval=UI_REFRESH_INTERVAL_MS, key="auto_refresh")
