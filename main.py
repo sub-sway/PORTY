@@ -8,9 +8,17 @@ import pandas as pd
 import datetime
 import random
 from streamlit_autorefresh import st_autorefresh
+import logging # 로깅 모듈 추가
+
+# --- 로거 설정 ---
+# 터미널에 시간, 로그 레벨, 메시지를 출력하도록 설정합니다.
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
 
 # --- 설정 ---
-# secrets.toml 파일에 아래 정보가 올바르게 입력되어 있는지 확인해주세요.
 HIVE_BROKER = st.secrets["HIVE_BROKER"]
 HIVE_USERNAME = st.secrets["HIVE_USERNAME"]
 HIVE_PASSWORD = st.secrets["HIVE_PASSWORD"]
@@ -29,34 +37,44 @@ MESSAGE_QUEUE = queue.Queue()
 # --- 페이지 설정 ---
 st.set_page_config(page_title="안전 모니터링 대시보드", layout="wide")
 st.title("🛡️ 항만시설 현장 안전 모니터링")
+logging.info("================ 스트림릿 앱 시작 ================")
 
 # --- MongoDB & MQTT 클라이언트 연결 ---
 @st.cache_resource
 def get_db_collection():
     try:
-        client = pymongo.MongoClient(MONGO_URI)
-        client.server_info()
+        logging.info("MongoDB에 연결을 시도합니다...")
+        client = pymongo.MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
+        client.server_info() # 연결 테스트
         db = client[DB_NAME]
+        logging.info(f"MongoDB 연결 성공. DB: '{DB_NAME}', Collection: '{COLLECTION_NAME}'")
         return db[COLLECTION_NAME]
     except Exception as e:
         st.error(f"MongoDB 연결 실패: {e}")
+        logging.error(f"MongoDB 연결 실패: {e}")
         return None
 
 @st.cache_resource
 def start_mqtt_client():
     def on_connect(client, userdata, flags, rc, properties=None):
         if rc == 0:
+            logging.info(f"MQTT 브로커 연결 성공. 토픽 구독: '{HIVE_TOPIC}'")
             client.subscribe(HIVE_TOPIC)
+        else:
+            logging.error(f"MQTT 브로커 연결 실패, 코드: {rc}")
 
     def on_message(client, userdata, msg):
         try:
-            data = json.loads(msg.payload.decode())
-            # [수정] 메시지에 필수 키가 모두 있는지 확인하여 데이터 무결성 강화
+            payload = msg.payload.decode()
+            logging.info(f"MQTT 메시지 수신 (토픽: '{msg.topic}'): {payload}")
+            data = json.loads(payload)
             if all(key in data for key in ['type', 'message', 'timestamp']):
                 MESSAGE_QUEUE.put(data)
-        except (json.JSONDecodeError, TypeError):
-            # 잘못된 형식의 JSON이나 필수 키가 없는 메시지는 무시
-            pass
+                logging.info("유효한 메시지를 큐에 추가했습니다.")
+            else:
+                logging.warning(f"메시지 형식 오류 (필수 키 누락): {data}")
+        except (json.JSONDecodeError, TypeError) as e:
+            logging.error(f"MQTT 메시지 처리 중 오류 발생: {e}")
 
     client_id = f"streamlit-listener-{random.randint(0, 1000)}"
     client = mqtt.Client(client_id=client_id, transport="websockets", callback_api_version=mqtt.CallbackAPIVersion.VERSION2)
@@ -65,18 +83,19 @@ def start_mqtt_client():
     client.on_connect = on_connect
     client.on_message = on_message
     try:
+        logging.info("MQTT 브로커에 연결을 시도합니다...")
         client.connect(HIVE_BROKER, HIVE_PORT, 60)
         client.loop_start()
         return client
     except Exception as e:
         st.error(f"MQTT 연결 실패: {e}")
+        logging.error(f"MQTT 연결 실패: {e}")
         return None
 
 # --- 클라이언트 실행 및 세션 상태 초기화 ---
 db_collection = get_db_collection()
 mqtt_client = start_mqtt_client()
 
-# 화면에 표시할 데이터들을 session_state에 보관
 if "latest_alerts" not in st.session_state:
     st.session_state.latest_alerts = []
 if "current_status" not in st.session_state:
@@ -86,39 +105,42 @@ if "current_status" not in st.session_state:
 if db_collection is not None:
     while not MESSAGE_QUEUE.empty():
         msg = MESSAGE_QUEUE.get()
+        logging.info(f"큐에서 메시지 처리 시작: {msg.get('type')}")
         
-        # 'normal' 타입 메시지는 DB에 저장하지 않고, 현재 상태만 업데이트
         if msg.get("type") == "normal":
+            logging.info("'normal' 타입 메시지입니다. 현재 상태를 업데이트합니다.")
             st.session_state.current_status = msg
             continue
 
-        # DB에 저장하기 직전, 'source_ip' 필드를 제거
         if 'source_ip' in msg:
             del msg['source_ip']
+            logging.info("'source_ip' 필드를 제거했습니다.")
 
-        # ROS2 노드가 보낸 문자열 타임스탬프를 datetime 객체로 변환
         try:
             msg['timestamp'] = datetime.datetime.strptime(msg['timestamp'], "%Y-%m-%d %H:%M:%S")
         except (ValueError, TypeError):
             msg['timestamp'] = datetime.datetime.now()
 
-        # DB에 저장 및 화면 표시용 리스트에 추가
         try:
             db_collection.insert_one(msg)
+            logging.info(f"메시지를 MongoDB에 성공적으로 저장했습니다: {msg}")
             st.session_state.latest_alerts.insert(0, msg)
             if len(st.session_state.latest_alerts) > 100:
                 st.session_state.latest_alerts.pop()
         except Exception as e:
             st.warning(f"DB 저장 실패: {e}")
+            logging.error(f"MongoDB 저장 실패: {e}")
 
-# 앱 시작 시 DB에서 최근 경보 데이터 일부를 미리 로드
 if not st.session_state.latest_alerts and db_collection is not None:
     try:
+        logging.info("초기 데이터 로드를 위해 DB를 조회합니다...")
         query = {"type": {"$ne": "normal"}}
         alerts = list(db_collection.find(query).sort("timestamp", pymongo.DESCENDING).limit(50))
         st.session_state.latest_alerts = alerts
+        logging.info(f"초기 데이터 {len(alerts)}건을 DB에서 로드했습니다.")
     except Exception as e:
         st.error(f"초기 데이터 로드 실패: {e}")
+        logging.error(f"초기 데이터 로드 실패: {e}")
 
 # --- UI 표시 ---
 col1, col2 = st.columns([3, 1])
@@ -141,10 +163,8 @@ if not st.session_state.latest_alerts:
     st.info("수신된 경보가 없습니다.")
 else:
     df = pd.DataFrame(st.session_state.latest_alerts)
-    # MongoDB의 datetime을 한국 시간으로 변환
     df['timestamp'] = pd.to_datetime(df['timestamp']).dt.tz_localize('UTC').dt.tz_convert('Asia/Seoul')
     
-    # 화면 표시 컬럼 이름 변경
     display_df = df.rename(columns={
         "timestamp": "발생 시각", "type": "유형", "message": "메시지"
     })
