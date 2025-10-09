@@ -19,8 +19,8 @@ HIVE_TOPIC = "robot/alerts"
 
 # MongoDB 설정 (제공된 정보로 업데이트)
 MONGO_URI = st.secrets["MONGO_URI"]
-DB_NAME = "AlertDB"
-COLLECTION_NAME = "AlertData"
+DB_NAME = "SensorDB"
+COLLECTION_NAME = "SensorData"
 
 # 스레드 간 데이터 전달을 위한 전역 큐
 MESSAGE_QUEUE = queue.Queue()
@@ -29,8 +29,8 @@ MESSAGE_QUEUE = queue.Queue()
 st.set_page_config(page_title="안전 모니터링 대시보드", layout="wide")
 st.title("🛡️ 항만시설 현장 안전 모니터링")
 
-# --- MongoDB & MQTT 클라이언트 연결 (Singleton으로 캐싱) ---
-@st.singleton
+# --- MongoDB & MQTT 클라이언트 연결 (cache_resource로 캐싱) ---
+@st.cache_resource
 def get_db_collection():
     try:
         client = pymongo.MongoClient(MONGO_URI)
@@ -41,7 +41,7 @@ def get_db_collection():
         st.error(f"MongoDB 연결 실패: {e}")
         return None
 
-@st.singleton
+@st.cache_resource
 def start_mqtt_client():
     def on_connect(client, userdata, flags, rc, properties=None):
         if rc == 0:
