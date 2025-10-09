@@ -141,7 +141,7 @@ if not st.session_state.latest_alerts and db_collection is not None:
     try:
         logger.info("초기 데이터 로드를 위해 DB를 조회합니다...")
         query = {"type": {"$ne": "normal"}}
-        alerts = list(db_collection.find(query).sort("timestamp", pymongo.DESCENDING).limit(50))
+        alerts = list(db_collection.find(query).sort("timestamp", pymongo.DESCENDING).limit(5))
         st.session_state.latest_alerts = alerts
         logger.info(f"초기 데이터 {len(alerts)}건을 DB에서 로드했습니다.")
     except Exception as e:
