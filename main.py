@@ -4,7 +4,6 @@ import json
 import ssl
 import threading
 import time
-from streamlit_autorefresh import st_autorefresh
 import warnings
 
 # "missing ScriptRunContext!" 경고 무시
