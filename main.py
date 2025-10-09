@@ -5,7 +5,7 @@ import ssl
 import queue
 import datetime
 import logging
-import sys  # Streamlit Cloud 로깅을 위해 추가
+import sys
 from streamlit_autorefresh import st_autorefresh
 
 # --- 설정 ---
@@ -18,6 +18,7 @@ TOPIC = "robot/alerts"
 MAX_ALERTS_IN_MEMORY = 100
 UI_REFRESH_INTERVAL_MS = 1000
 MESSAGE_QUEUE = queue.Queue()
+
 
 # --- Streamlit 페이지 설정 ---
 st.set_page_config(page_title="항만시설 안전 지킴이 대시보드", layout="wide")
@@ -46,6 +47,7 @@ if "current_status" not in st.session_state:
 if "raw_logs" not in st.session_state:
     st.session_state.raw_logs = []
 
+
 # --- MQTT 콜백 함수 ---
 def on_connect(client, userdata, flags, rc, properties=None):
     if rc == 0:
@@ -70,10 +72,7 @@ def setup_mqtt_client():
     )
     logger = logging.getLogger(__name__)
     
-    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-    # [수정] client = mqtt.Client(...) 중복 코드 삭제
-    # 아래 한 줄만 남겨서 로거가 올바르게 적용되도록 수정했습니다.
-    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    # client를 한 번만 생성하고 로거를 적용
     client = mqtt.Client(callback_api_version=mqtt.CallbackAPIVersion.VERSION2, transport="websockets")
     client.enable_logger(logger)
     
@@ -87,12 +86,9 @@ def setup_mqtt_client():
         client.loop_start()
         return client
     except Exception as e:
-        # st.error는 UI에 표시되지만, 로그로도 남겨서 확인
         logger.error(f"MQTT 연결 시도 중 예외 발생: {e}")
         st.error(f"MQTT 연결 중 오류 발생: {e}")
         return None
-
-# --- 이하 코드는 수정 없음 ---
 
 # --- 메인 애플리케이션 로직 ---
 if st.session_state.client is None:
@@ -100,10 +96,13 @@ if st.session_state.client is None:
 
 while not MESSAGE_QUEUE.empty():
     message = MESSAGE_QUEUE.get()
+    
     st.session_state.raw_logs.append(message)
     if len(st.session_state.raw_logs) > MAX_ALERTS_IN_MEMORY:
         st.session_state.raw_logs = st.session_state.raw_logs[-MAX_ALERTS_IN_MEMORY:]
+    
     msg_type = message.get("type")
+    
     if msg_type == "normal":
         st.session_state.current_status = message
     elif msg_type in ["fire", "safety"]:
@@ -119,5 +118,36 @@ else:
 
 st.divider()
 
-# (이하 UI 코드는 기존과 동일하므로 생략)
-# ...
+st.subheader("📡 시스템 현재 상태")
+status_message = st.session_state.current_status.get("message", "상태 정보 없음")
+status_time = st.session_state.current_status.get("timestamp", "N/A")
+
+try:
+    last_signal_time = datetime.datetime.strptime(status_time, "%Y-%m-%d %H:%M:%S")
+    time_diff_seconds = (datetime.datetime.now() - last_signal_time).total_seconds()
+    
+    if time_diff_seconds > 15:
+        st.error(f"❌ ROS2 노드 연결 끊김 의심 (마지막 신호: {status_time})")
+    else:
+        st.success(f"{status_message} (마지막 신호: {status_time})")
+except (ValueError, TypeError):
+     st.warning(f"{status_message}")
+
+st.divider()
+
+st.subheader("🚨 실시간 경보 내역 (최근 10건)")
+if not st.session_state.alerts:
+    st.info("현재 수신된 경보가 없습니다.")
+else:
+    for alert in reversed(st.session_state.alerts[-10:]):
+        msg_type = alert.get("type", "unknown"); message = alert.get("message", "내용 없음"); timestamp = alert.get("timestamp", "N/A"); source = alert.get("source_ip", "N/A")
+        if msg_type == "fire": st.error(f"🔥 **화재 경보!** {message}\n\n🕓 {timestamp}\n\n📍 {source}")
+        elif msg_type == "safety": st.warning(f"⚠️ **안전조끼 미착용** {message}\n\n🕓 {timestamp}\n\n📍 {source}")
+
+with st.expander("🕵️ 전체 수신 로그 (디버깅용)"):
+    if not st.session_state.raw_logs:
+        st.write("수신된 메시지가 없습니다.")
+    else:
+        st.json(st.session_state.raw_logs[::-1])
+
+st_autorefresh(interval=UI_REFRESH_INTERVAL_MS, key="auto_refresh")
