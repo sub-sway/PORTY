@@ -8,7 +8,8 @@ streamlit-autorefresh
 
 
 # MQTT 통신
-paho-mqtt>=1.6.1
+paho-mqtt[websockets]==2.1.0
+
 
 # 데이터 처리
 numpy>=1.24.0
