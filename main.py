@@ -27,7 +27,6 @@ MONGO_URI = st.secrets["MONGO_URI"]
 # MQTT 및 MongoDB 고정 설정
 HIVE_PORT = 8884
 HIVE_TOPIC = "robot/alerts"
-# [수정] 요청하신 DB 및 컬렉션 이름으로 변경
 DB_NAME = "AlertDB"
 COLLECTION_NAME = "AlertData"
 
@@ -121,14 +120,20 @@ if db_collection is not None:
         except (ValueError, TypeError):
             msg['timestamp'] = datetime.datetime.now()
 
+        # [핵심 수정] UI에 먼저 즉시 반영하고, 그 다음에 DB 저장을 시도합니다.
+        # 이렇게 하면 DB 연결에 일시적인 문제가 생겨도 화면에는 경보가 표시됩니다.
+        st.session_state.latest_alerts.insert(0, msg)
+        if len(st.session_state.latest_alerts) > 100:
+            st.session_state.latest_alerts.pop()
+        logging.info(f"UI에 메시지를 즉시 반영했습니다: {msg.get('type')}")
+        
+        # 이제 MongoDB에 저장을 시도합니다.
         try:
             db_collection.insert_one(msg)
-            logging.info(f"메시지를 MongoDB에 성공적으로 저장했습니다: {msg}")
-            st.session_state.latest_alerts.insert(0, msg)
-            if len(st.session_state.latest_alerts) > 100:
-                st.session_state.latest_alerts.pop()
+            logging.info(f"메시지를 MongoDB에 성공적으로 저장했습니다.")
         except Exception as e:
-            st.warning(f"DB 저장 실패: {e}")
+            # 화면에는 이미 표시되었으므로, DB 저장 실패에 대한 경고만 UI와 로그에 남깁니다.
+            st.warning(f"DB 저장 실패! 화면에는 표시됩니다. ({e})")
             logging.error(f"MongoDB 저장 실패: {e}")
 
 if not st.session_state.latest_alerts and db_collection is not None:
