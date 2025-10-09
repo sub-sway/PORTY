@@ -14,28 +14,33 @@ USERNAME = "JetsonOrin"
 PASSWORD = "One24511"
 TOPIC = "robot/alerts"
 
+# ===============================
+# Streamlit 기본 설정
+# ===============================
 st.set_page_config(page_title="항만시설 안전 지킴이 대시보드", layout="wide")
 st.title("🛡️ 항만시설 현장 안전 모니터링 (HiveMQ Cloud)")
 
 # ===============================
-# 연결 상태 전역 변수
+# 세션 상태 초기화
 # ===============================
-connection_status = {"connecting": True, "connected": False}
-messages_buffer = []
+if "connected" not in st.session_state:
+    st.session_state["connected"] = False
+if "alerts" not in st.session_state:
+    st.session_state["alerts"] = []
+if "mqtt_client" not in st.session_state:
+    st.session_state["mqtt_client"] = None
 
 # ===============================
-# MQTT 콜백 정의
+# MQTT 콜백 함수
 # ===============================
 def on_connect(client, userdata, flags, rc, properties=None):
     """MQTT 연결 콜백"""
     if rc == 0:
         client.subscribe(TOPIC)
-        connection_status["connected"] = True
-        connection_status["connecting"] = False
+        st.session_state["connected"] = True
         print(f"✅ HiveMQ Cloud 연결 성공 (topic: {TOPIC})")
     else:
-        connection_status["connected"] = False
-        connection_status["connecting"] = False
+        st.session_state["connected"] = False
         print(f"❌ HiveMQ Cloud 연결 실패, 코드={rc}")
 
 def on_message(client, userdata, msg):
@@ -46,16 +51,21 @@ def on_message(client, userdata, msg):
     except Exception:
         data = {"type": "unknown", "message": msg.payload.decode()}
 
-    if data.get("type") not in ["fire", "safety"]:
-        return
-
-    messages_buffer.insert(0, data)
-    print(f"📩 수신: {data}")
+    # 화재 또는 안전 관련 메시지만 처리
+    if data.get("type") in ["fire", "safety"]:
+        st.session_state["alerts"].append({
+            "type": data.get("type"),
+            "message": data.get("message", ""),
+            "timestamp": data.get("timestamp", ""),
+            "source": data.get("source_ip", "unknown")
+        })
+        print(f"📩 수신: {data}")
 
 # ===============================
 # MQTT 연결 함수
 # ===============================
 def connect_mqtt():
+    """HiveMQ Cloud 연결"""
     client = mqtt.Client(callback_api_version=mqtt.CallbackAPIVersion.VERSION2)
     client.username_pw_set(USERNAME, PASSWORD)
     client.tls_set(cert_reqs=ssl.CERT_NONE)
@@ -65,48 +75,55 @@ def connect_mqtt():
     try:
         client.connect(BROKER, PORT, 60)
         client.loop_start()
+        st.session_state["mqtt_client"] = client
         print("🟡 HiveMQ Cloud 연결 시도 중...")
     except Exception as e:
-        connection_status["connecting"] = False
+        st.session_state["connected"] = False
         print(f"❌ MQTT 연결 실패: {e}")
 
-# 앱 시작 시 자동 연결
-threading.Thread(target=connect_mqtt, daemon=True).start()
+# ===============================
+# 연결 스레드 시작 (1회만 실행)
+# ===============================
+if st.session_state["mqtt_client"] is None:
+    threading.Thread(target=connect_mqtt, daemon=True).start()
 
 # ===============================
 # UI 표시
 # ===============================
-if connection_status["connecting"]:
-    st.warning("🔄 HiveMQ Cloud 연결 중...")
-elif connection_status["connected"]:
-    st.success("🟢 HiveMQ Cloud 연결됨")
+if not st.session_state["connected"]:
+    st.warning("🔄 HiveMQ Cloud 연결 중... (약간의 시간이 걸릴 수 있습니다.)")
 else:
-    st.error("❌ MQTT 연결 실패")
+    st.success("🟢 HiveMQ Cloud 연결됨")
 
 st.divider()
 st.subheader("📡 실시간 경보 내역")
 
-placeholder = st.empty()
+# ===============================
+# 실시간 UI 업데이트
+# ===============================
+alert_placeholder = st.empty()
 
-def render_message(msg):
-    msg_type = msg.get("type", "info")
-    message = msg.get("message", "")
-    timestamp = msg.get("timestamp", "")
-    source = msg.get("source_ip", "unknown")
+def render_alerts():
+    """Streamlit rerun 루프에서 경보 표시"""
+    alerts = st.session_state["alerts"][-10:]  # 최근 10개만 표시
+    with alert_placeholder.container():
+        for alert in reversed(alerts):
+            msg_type = alert.get("type", "info")
+            message = alert.get("message", "")
+            timestamp = alert.get("timestamp", "")
+            source = alert.get("source", "unknown")
 
-    if msg_type == "fire":
-        st.error(f"🔥 **화재 경보!** {message}\n🕓 {timestamp}\n📍 {source}")
-    elif msg_type == "safety":
-        st.warning(f"⚠ **안전조끼 미착용** {message}\n🕓 {timestamp}\n📍 {source}")
+            if msg_type == "fire":
+                st.error(f"🔥 **화재 경보!** {message}\n🕓 {timestamp}\n📍 {source}")
+            elif msg_type == "safety":
+                st.warning(f"⚠ **안전조끼 미착용** {message}\n🕓 {timestamp}\n📍 {source}")
+            else:
+                st.info(f"ℹ️ {message}")
 
-def update_ui():
-    while True:
-        if messages_buffer:
-            with placeholder.container():
-                for msg in messages_buffer[:10]:
-                    render_message(msg)
-        time.sleep(0.5)
-
-threading.Thread(target=update_ui, daemon=True).start()
-
-st.caption("Jetson Orin이 HiveMQ Cloud로 발행한 이상 상태만 실시간 표시합니다.")
+# ===============================
+# Streamlit rerun 루프
+# ===============================
+while True:
+    render_alerts()
+    time.sleep(1)
+    st.rerun()
