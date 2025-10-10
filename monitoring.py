@@ -210,7 +210,7 @@ class UnifiedDashboard:
         with st.sidebar.expander("🧠 시스템 상태 점검", expanded=False):
         # MongoDB 연결 확인
             try:
-                if self.collections and self.collections["alerts"]:
+                if self.collections is not None and self.collections.get("alerts") is not None:
                     info = self.collections["alerts"].database.client.server_info()
                     st.success("✅ MongoDB 연결 정상 작동")
                 else:
