@@ -93,11 +93,15 @@ def start_mqtt_clients():
     def on_message_alerts(client, userdata, msg):
         try:
             payload = msg.payload.decode()
+            # [수정] 수신된 메시지를 즉시 로그에 기록하여 확인
+            logging.info(f"ALERT TOPIC MESSAGE RECEIVED: {payload}")
             data = json.loads(payload)
             if all(key in data for key in ['type', 'message', 'timestamp']):
                 alerts_queue.put(data)
         except Exception as e:
-            logging.error(f"안전 모니터링 메시지 처리 중 오류: {e}")
+            # [수정] 오류 발생 시 원본 페이로드와 함께 더 자세한 로그 기록
+            logging.error(f"ALERT MESSAGE PROCESSING FAILED. Error: {e}. Payload: {msg.payload.decode()}", exc_info=True)
+
 
     try:
         alerts_client = mqtt.Client(client_id=f"st-alerts-{random.randint(0, 1000)}", transport="websockets", callback_api_version=mqtt.CallbackAPIVersion.VERSION2)
@@ -124,9 +128,14 @@ def start_mqtt_clients():
 
     def on_message_sensors(client, userdata, msg):
         try:
-            sensors_queue.put(msg.payload.decode().strip())
+            payload = msg.payload.decode().strip()
+            # [수정] 수신된 메시지를 즉시 로그에 기록하여 확인
+            logging.info(f"SENSOR TOPIC MESSAGE RECEIVED: {payload}")
+            sensors_queue.put(payload)
         except Exception as e:
-            logging.error(f"센서 메시지 수신 중 오류: {e}")
+            # [수정] 오류 발생 시 원본 페이로드와 함께 더 자세한 로그 기록
+            logging.error(f"SENSOR MESSAGE PROCESSING FAILED. Error: {e}. Payload: {msg.payload.decode()}", exc_info=True)
+
 
     try:
         sensors_client = mqtt.Client(client_id=f"st-sensors-{random.randint(0, 1000)}", callback_api_version=mqtt.CallbackAPIVersion.VERSION2)
@@ -533,3 +542,4 @@ if __name__ == "__main__":
     # 로컬에서 실행할 때도 동일하게 작동합니다.
     app = UnifiedDashboard()
     app.run()
+
