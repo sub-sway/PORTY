@@ -1,0 +1,27 @@
+# --- Streamlit 대시보드 ---
+streamlit>=1.36.0
+streamlit-webrtc>=0.47.7
+
+# --- FastAPI + 서버 ---
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
+
+# --- AI / YOLO 추론 ---
+ultralytics>=8.1.0
+torch>=2.2.0
+torchvision>=0.17.0
+
+# --- 이미지 처리 ---
+pillow>=10.0.0
+opencv-python>=4.9.0.80
+numpy>=1.24.0
+
+# --- 데이터베이스 ---
+pymongo>=4.6.0
+
+# --- 기타 유틸 ---
+python-multipart>=0.0.9
+requests>=2.31.0
+
+# --- 타입 및 경고 방지 ---
+typing-extensions>=4.9.0
