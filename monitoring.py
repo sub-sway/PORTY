@@ -207,6 +207,24 @@ class UnifiedDashboard:
             st.success("Jetson/서버 현장 알림음은 자동으로 재생됩니다 🔊")
             st.info("이 Streamlit 인터페이스는 원격 대시보드 용입니다.")
             st.divider()
+        with st.sidebar.expander("🧠 시스템 상태 점검", expanded=False):
+        # MongoDB 연결 확인
+            try:
+                if self.collections and self.collections["alerts"]:
+                    info = self.collections["alerts"].database.client.server_info()
+                    st.success("✅ MongoDB 연결 정상 작동")
+                else:
+                    st.warning("⚠️ MongoDB 초기화 실패")
+            except Exception as e:
+                st.error(f"❌ MongoDB 연결 실패: {e}")
+            
+            # 센서 MQTT 연결 확인
+            sensors_client = self.clients.get("sensors")
+            if sensors_client and sensors_client.is_connected():
+                st.success("✅ 센서 MQTT 연결됨")
+            else:
+                st.error("❌ 센서 MQTT 연결 끊김")
+
 
     def _render_main_page(self):
         st.header("항만시설 현장 안전 모니터링")
