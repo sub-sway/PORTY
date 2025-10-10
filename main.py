@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 if not logger.handlers:
     handler = logging.StreamHandler(sys.stdout)
-    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s', datefmt='%Y-m-%d %H:%M:%S')
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 
@@ -31,22 +31,15 @@ HIVE_PORT = 8884
 HIVE_TOPIC = "robot/alerts"
 DB_NAME = "AlertDB"
 COLLECTION_NAME = "AlertData"
+CONNECTION_TIMEOUT_SECONDS = 30  # 30초 동안 아무 메시지도 없으면 재연결 시도
 
-# [핵심 수정 1] 전역 큐 선언을 제거합니다.
-# MESSAGE_QUEUE = queue.Queue()
-
-# --- 페이지 설정 ---
+# --- 페이지 설정 및 캐시된 리소스 ---
 st.set_page_config(page_title="안전 모니터링 대시보드", layout="wide")
-st.title("🛡️ 항만시설 현장 안전 모니터링")
-logger.info("================ 스트림릿 앱 시작 ================")
 
-# --- [핵심 수정 2] 큐(Queue)를 캐시하여 앱 재실행 시에도 유지되도록 합니다. ---
 @st.cache_resource
 def get_message_queue():
-    """앱 전체의 생명주기 동안 단 하나만 존재하는 큐를 생성하고 반환합니다."""
     return queue.Queue()
 
-# --- MongoDB & MQTT 클라이언트 연결 ---
 @st.cache_resource
 def get_db_collection():
     try:
@@ -63,9 +56,7 @@ def get_db_collection():
 
 @st.cache_resource
 def start_mqtt_client():
-    # [핵심 수정 3] 캐시된 큐를 가져와서 on_message 함수에서 사용합니다.
     message_queue = get_message_queue()
-
     def on_connect(client, userdata, flags, rc, properties=None):
         if rc == 0:
             logger.info(f"MQTT 브로커 연결 성공. 토픽 구독: '{HIVE_TOPIC}'")
@@ -79,12 +70,10 @@ def start_mqtt_client():
             logger.info(f"MQTT 메시지 수신 (토픽: '{msg.topic}'): {payload}")
             data = json.loads(payload)
             if all(key in data for key in ['type', 'message', 'timestamp']):
-                message_queue.put(data) # 캐시된 큐에 데이터 삽입
+                message_queue.put(data)
                 logger.info("유효한 메시지를 큐에 추가했습니다.")
-            else:
-                logger.warning(f"메시지 형식 오류 (필수 키 누락): {data}")
-        except (json.JSONDecodeError, TypeError) as e:
-            logger.error(f"MQTT 메시지 처리 중 오류 발생: {e}")
+        except (json.JSONDecodeError, TypeError):
+            pass
 
     client_id = f"streamlit-listener-{random.randint(0, 1000)}"
     client = mqtt.Client(client_id=client_id, transport="websockets", callback_api_version=mqtt.CallbackAPIVersion.VERSION2)
@@ -105,21 +94,44 @@ def start_mqtt_client():
 # --- 클라이언트 및 큐 실행/초기화 ---
 db_collection = get_db_collection()
 mqtt_client = start_mqtt_client()
-# [핵심 수정 4] 메인 로직에서도 캐시된 큐를 사용합니다.
 message_queue = get_message_queue()
 
+# --- 세션 상태 초기화 ---
 if "latest_alerts" not in st.session_state:
     st.session_state.latest_alerts = []
 if "current_status" not in st.session_state:
     st.session_state.current_status = {"message": "데이터 수신 대기 중...", "timestamp": "N/A"}
+if "last_message_time" not in st.session_state:
+    st.session_state.last_message_time = datetime.datetime.now()
+
+# --- [핵심 기능 2] 자동 재연결 로직 (Watchdog) ---
+time_since_last_message = (datetime.datetime.now() - st.session_state.last_message_time).total_seconds()
+if time_since_last_message > CONNECTION_TIMEOUT_SECONDS:
+    st.warning(f"{CONNECTION_TIMEOUT_SECONDS}초 이상 신호 없음. MQTT 재연결을 시도합니다...")
+    logger.warning("MQTT 연결 시간 초과. 모든 캐시를 지우고 재연결을 시도합니다.")
+    st.cache_resource.clear()
+    st.session_state.last_message_time = datetime.datetime.now() # 타이머 초기화
+    st.rerun()
+
+# --- UI 제목 ---
+st.title("🛡️ 항만시설 현장 안전 모니터링")
+logger.info("================ 스트림릿 앱 UI 렌더링 ================")
 
 # --- 메인 로직 ---
 if db_collection is not None:
-    while not message_queue.empty(): # 캐시된 큐를 확인
-        msg = message_queue.get()    # 캐시된 큐에서 데이터를 가져옴
+    while not message_queue.empty():
+        msg = message_queue.get()
+        st.session_state.last_message_time = datetime.datetime.now() # 메시지 처리 시간 갱신
         logger.info(f"큐에서 메시지 처리 시작: {msg.get('type')}")
         
-        if msg.get("type") == "normal":
+        # --- [핵심 기능 1] 이벤트 발생 시점에 즉시 팝업 알림 ---
+        alert_type = msg.get("type")
+        if alert_type == "fire":
+            st.toast(f"🔥 긴급: 화재 경보 발생!", icon="🔥")
+        elif alert_type == "safety":
+            st.toast(f"⚠️ 주의: 안전조끼 미착용 감지!", icon="⚠️")
+        
+        if alert_type == "normal":
             st.session_state.current_status = msg
             continue
 
@@ -137,13 +149,12 @@ if db_collection is not None:
         
         try:
             db_collection.insert_one(msg)
-            logger.info(f"메시지를 MongoDB에 성공적으로 저장했습니다.")
-            alert_type = msg.get("type", "알 수 없음")
-            st.toast(f"✅ '{alert_type}' 경보가 DB에 저장되었습니다.", icon="💾")
+            logger.info("메시지를 MongoDB에 성공적으로 저장했습니다.")
         except Exception as e:
             st.warning(f"DB 저장 실패! 화면에는 표시됩니다. ({e})")
             logger.error(f"MongoDB 저장 실패: {e}")
 
+# --- 초기 데이터 로드 ---
 if not st.session_state.latest_alerts and db_collection is not None:
     try:
         logger.info("초기 데이터 로드를 위해 DB를 조회합니다...")
@@ -188,4 +199,3 @@ else:
     )
 
 st_autorefresh(interval=2000, key="ui_refresher")
-
