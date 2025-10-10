@@ -20,18 +20,21 @@ if not logger.handlers:
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 
+# --- 알림음 종류별 Base64 데이터 ---
+FIRE_ALARM_SOUND_BASE64 = "data:audio/wav;base64,UklGRiSAAQBXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAAABkYXRhgQEAIAAAAAYWGRo3doN1l3p8gH+Cf4J/in+LgY2Pjp+RlpWXl5iYmJeXlpeXlpeXlpeXlpeXlpeXl5eXl5aXk5iUlpWXl5aXlpeVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWV"
+SAFETY_ALERT_SOUND_BASE64 = "data:audio/mpeg;base64,SUQzBAAAAAAAIVRYdEnDTPOq/3/3v/2/gAAAAAAAAAAAAAAB/2/g2/gAAA4SAAAEzGgAAAAAAD+kAzYAAAAAAAnnjk8eDEGANjBEyA/IjsgEyA7YEKkC5AlMBNkG/g2/gAAAAAAAAAAAAAAB/2/g2/gAAAA4SAAAEzGgAAAAAAD+kAzYAAAAAAAnnjk8eDEGANjBEyA/IjsgEyA7YEKkC5AlMBNk"
+
 # --- 설정 ---
 HIVE_BROKER = st.secrets["HIVE_BROKER"]
 HIVE_USERNAME = st.secrets["HIVE_USERNAME"]
 HIVE_PASSWORD = st.secrets["HIVE_PASSWORD"]
 MONGO_URI = st.secrets["MONGO_URI"]
 
-# MQTT 및 MongoDB 고정 설정
 HIVE_PORT = 8884
 HIVE_TOPIC = "robot/alerts"
 DB_NAME = "AlertDB"
 COLLECTION_NAME = "AlertData"
-CONNECTION_TIMEOUT_SECONDS = 30  # 30초 동안 아무 메시지도 없으면 재연결 시도
+CONNECTION_TIMEOUT_SECONDS = 30
 
 # --- 페이지 설정 및 캐시된 리소스 ---
 st.set_page_config(page_title="안전 모니터링 대시보드", layout="wide")
@@ -55,8 +58,7 @@ def get_db_collection():
         return None
 
 @st.cache_resource
-def start_mqtt_client():
-    message_queue = get_message_queue()
+def start_mqtt_client(_message_queue):
     def on_connect(client, userdata, flags, rc, properties=None):
         if rc == 0:
             logger.info(f"MQTT 브로커 연결 성공. 토픽 구독: '{HIVE_TOPIC}'")
@@ -70,7 +72,7 @@ def start_mqtt_client():
             logger.info(f"MQTT 메시지 수신 (토픽: '{msg.topic}'): {payload}")
             data = json.loads(payload)
             if all(key in data for key in ['type', 'message', 'timestamp']):
-                message_queue.put(data)
+                _message_queue.put(data)
                 logger.info("유효한 메시지를 큐에 추가했습니다.")
         except (json.JSONDecodeError, TypeError):
             pass
@@ -81,6 +83,7 @@ def start_mqtt_client():
     client.tls_set(cert_reqs=ssl.CERT_NONE)
     client.on_connect = on_connect
     client.on_message = on_message
+    
     try:
         logger.info("MQTT 브로커에 연결을 시도합니다...")
         client.connect(HIVE_BROKER, HIVE_PORT, 60)
@@ -91,10 +94,20 @@ def start_mqtt_client():
         logger.error(f"MQTT 연결 실패: {e}")
         return None
 
+# --- 알림음 재생 함수 ---
+def play_notification_sound(sound_type="safety"):
+    if sound_type == "fire":
+        sound_data = FIRE_ALARM_SOUND_BASE64
+    else:
+        sound_data = SAFETY_ALERT_SOUND_BASE64
+    
+    audio_html = f'<audio autoplay><source src="{sound_data}" type="audio/mpeg"></audio>'
+    st.html(audio_html)
+
 # --- 클라이언트 및 큐 실행/초기화 ---
-db_collection = get_db_collection()
-mqtt_client = start_mqtt_client()
 message_queue = get_message_queue()
+db_collection = get_db_collection()
+mqtt_client = start_mqtt_client(message_queue)
 
 # --- 세션 상태 초기화 ---
 if "latest_alerts" not in st.session_state:
@@ -104,32 +117,30 @@ if "current_status" not in st.session_state:
 if "last_message_time" not in st.session_state:
     st.session_state.last_message_time = datetime.datetime.now()
 
-# --- [핵심 기능 2] 자동 재연결 로직 (Watchdog) ---
+# --- 자동 재연결 로직 ---
 time_since_last_message = (datetime.datetime.now() - st.session_state.last_message_time).total_seconds()
 if time_since_last_message > CONNECTION_TIMEOUT_SECONDS:
     st.warning(f"{CONNECTION_TIMEOUT_SECONDS}초 이상 신호 없음. MQTT 재연결을 시도합니다...")
     logger.warning("MQTT 연결 시간 초과. 모든 캐시를 지우고 재연결을 시도합니다.")
     st.cache_resource.clear()
-    st.session_state.last_message_time = datetime.datetime.now() # 타이머 초기화
+    st.session_state.last_message_time = datetime.datetime.now()
     st.rerun()
 
 # --- UI 제목 ---
 st.title("🛡️ 항만시설 현장 안전 모니터링")
 logger.info("================ 스트림릿 앱 UI 렌더링 ================")
 
-# --- 메인 로직 ---
+# --- 메인 로직: 큐에서 메시지 처리 ---
 if db_collection is not None:
     while not message_queue.empty():
         msg = message_queue.get()
-        st.session_state.last_message_time = datetime.datetime.now() # 메시지 처리 시간 갱신
+        st.session_state.last_message_time = datetime.datetime.now()
         logger.info(f"큐에서 메시지 처리 시작: {msg.get('type')}")
         
-        # --- [핵심 기능 1] 이벤트 발생 시점에 즉시 팝업 알림 ---
         alert_type = msg.get("type")
-        if alert_type == "fire":
-            st.toast(f"🔥 긴급: 화재 경보 발생!", icon="🔥")
-        elif alert_type == "safety":
-            st.toast(f"⚠️ 주의: 안전조끼 미착용 감지!", icon="⚠️")
+        if alert_type in ["fire", "safety"]:
+            play_notification_sound(alert_type)
+            st.toast(f"🚨 {msg.get('message')}", icon="🔥" if alert_type == "fire" else "⚠️")
         
         if alert_type == "normal":
             st.session_state.current_status = msg
