@@ -213,24 +213,19 @@ class UnifiedDashboard:
                     logging.error(f"MongoDB 저장 실패 (alerts): {e}")
 
         # 2. 센서 데이터 큐 처리
-        # [수정] 센서 데이터의 키 순서를 정의합니다.
         sensor_keys = ["CH4", "EtOH", "H2", "NH3", "CO", "NO2", "Oxygen", "Distance", "Flame"]
         new_data = []
         while not self.sensors_queue.empty():
             payload = self.sensors_queue.get()
             try:
-                # [수정] 쉼표로 구분된 문자열을 파싱합니다.
                 values = [float(v.strip()) for v in payload.split(',')]
                 
-                # [수정] 값의 개수가 올바른지 확인합니다.
                 if len(values) != len(sensor_keys):
                     logging.warning(f"센서 데이터 값 개수 불일치: {len(values)}개 수신, {len(sensor_keys)}개 필요 - 페이로드: {payload}")
                     continue
 
-                # [수정] 키와 값을 짝지어 딕셔너리를 생성합니다.
                 data_dict = dict(zip(sensor_keys, values))
                 
-                # Flame 센서 값은 정수형이어야 합니다.
                 data_dict['Flame'] = int(data_dict['Flame'])
 
                 data_dict['timestamp'] = datetime.now(timezone.utc)
@@ -242,7 +237,6 @@ class UnifiedDashboard:
                     except Exception as e:
                         logging.error(f"MongoDB 저장 실패 (sensors): {e}")
             except (ValueError, IndexError) as e:
-                # [수정] 숫자 변환 실패 또는 데이터 형식 오류에 대한 예외 처리를 강화합니다.
                 logging.warning(f"센서 데이터 파싱 오류 (처리 불가): {e} - 페이로드: {payload}")
         
         if new_data:
@@ -272,6 +266,7 @@ class UnifiedDashboard:
             if st.session_state.sound_enabled:
                 st.session_state.play_sound_trigger = sound_type
 
+        # [수정] 불꽃 감지 시에만 팝업 알림(st.toast)을 표시합니다.
         if data_dict.get("Flame") == 0:
             msg = "🔥 긴급: 불꽃 감지됨! 즉시 확인이 필요합니다!"
             log_alert(msg)
@@ -281,25 +276,25 @@ class UnifiedDashboard:
         if oxygen_val is not None and not (OXYGEN_SAFE_MIN <= oxygen_val <= OXYGEN_SAFE_MAX):
             msg = f"🟠 산소 농도 경고! 현재 값: {oxygen_val:.1f}%"
             log_alert(msg)
-            st.toast(msg, icon="🟠")
+            # st.toast(msg, icon="🟠") # [수정] 팝업 알림 비활성화
             
         no2_val = data_dict.get("NO2")
         if no2_val is not None:
             if no2_val >= NO2_DANGER_LIMIT:
                 msg = f"🔴 이산화질소(NO2) 위험! 현재 값: {no2_val:.3f} ppm"
                 log_alert(msg)
-                trigger_ui_alert(msg, "🔴", "safety")
+                # trigger_ui_alert(msg, "🔴", "safety") # [수정] 팝업 알림 비활성화
             elif no2_val >= NO2_WARN_LIMIT:
                 msg = f"🟡 이산화질소(NO2) 주의! 현재 값: {no2_val:.3f} ppm"
                 log_alert(msg)
-                st.toast(msg, icon="🟡")
+                # st.toast(msg, icon="🟡") # [수정] 팝업 알림 비활성화
         
         for sensor in ["CH4", "EtOH", "H2", "NH3", "CO"]:
             new_value = data_dict.get(sensor, 0.0)
             if new_value > 0 and st.session_state.last_sensor_values.get(sensor, 0.0) == 0:
                 msg = f"🟡 {sensor} 가스 감지됨! 현재 값: {new_value:.3f}"
                 log_alert(msg)
-                st.toast(msg, icon="🟡")
+                # st.toast(msg, icon="🟡") # [수정] 팝업 알림 비활성화
             st.session_state.last_sensor_values[sensor] = new_value
 
     def _render_header_and_nav(self):
