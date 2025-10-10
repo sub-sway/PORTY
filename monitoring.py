@@ -266,7 +266,7 @@ class UnifiedDashboard:
             if st.session_state.sound_enabled:
                 st.session_state.play_sound_trigger = sound_type
 
-        # [수정] 불꽃 감지 시에만 팝업 알림(st.toast)을 표시합니다.
+        # 불꽃 감지 시에만 팝업 알림(st.toast)을 표시
         if data_dict.get("Flame") == 0:
             msg = "🔥 긴급: 불꽃 감지됨! 즉시 확인이 필요합니다!"
             log_alert(msg)
@@ -276,103 +276,35 @@ class UnifiedDashboard:
         if oxygen_val is not None and not (OXYGEN_SAFE_MIN <= oxygen_val <= OXYGEN_SAFE_MAX):
             msg = f"🟠 산소 농도 경고! 현재 값: {oxygen_val:.1f}%"
             log_alert(msg)
-            # st.toast(msg, icon="🟠") # [수정] 팝업 알림 비활성화
             
         no2_val = data_dict.get("NO2")
         if no2_val is not None:
             if no2_val >= NO2_DANGER_LIMIT:
                 msg = f"🔴 이산화질소(NO2) 위험! 현재 값: {no2_val:.3f} ppm"
                 log_alert(msg)
-                # trigger_ui_alert(msg, "🔴", "safety") # [수정] 팝업 알림 비활성화
             elif no2_val >= NO2_WARN_LIMIT:
                 msg = f"🟡 이산화질소(NO2) 주의! 현재 값: {no2_val:.3f} ppm"
                 log_alert(msg)
-                # st.toast(msg, icon="🟡") # [수정] 팝업 알림 비활성화
         
-        for sensor in ["CH4", "EtOH", "H2", "NH3", "CO"]:
+        # --- 이 아랫부분이 수정된 핵심 로직입니다 ---
+        
+        newly_detected_gases = []
+        gas_sensors = ["CH4", "EtOH", "H2", "NH3", "CO"]
+        
+        for sensor in gas_sensors:
             new_value = data_dict.get(sensor, 0.0)
+            # 이전에 0이었다가 처음으로 0보다 큰 값이 감지된 경우
             if new_value > 0 and st.session_state.last_sensor_values.get(sensor, 0.0) == 0:
-                msg = f"🟡 {sensor} 가스 감지됨! 현재 값: {new_value:.3f}"
-                log_alert(msg)
-                # st.toast(msg, icon="🟡") # [수정] 팝업 알림 비활성화
+                newly_detected_gases.append(f"{sensor}: {new_value:.3f}")
+            
+            # 마지막 값은 항상 업데이트
             st.session_state.last_sensor_values[sensor] = new_value
 
-    def _render_header_and_nav(self):
-        st.title("🛡️ 통합 안전 모니터링 대시보드")
-        cols = st.columns(3)
-        pages = {'main': '🏠 메인 대시보드', 'sensor_dashboard': '📈 실시간 센서 모니터링', 'sensor_log': '📜 센서 이벤트 로그'}
-        
-        def switch_page(page_key):
-            st.session_state.page = page_key
-
-        for i, (page_key, page_title) in enumerate(pages.items()):
-            with cols[i]:
-                st.button(
-                    page_title, 
-                    on_click=switch_page, 
-                    args=(page_key,),
-                    width="stretch", 
-                    type="primary" if st.session_state.page == page_key else "secondary"
-                )
-        st.divider()
-    
-    def _render_sidebar(self):
-        with st.sidebar:
-            st.header("⚙️ 설정")
-            st.info("브라우저 정책으로 인해, 알림음을 들으시려면 먼저 아래 버튼을 눌러 오디오를 활성화해야 합니다.")
-            
-            if not st.session_state.sound_primed:
-                if st.button("🔔 알림음 활성화 (최초 1회 클릭)"):
-                    st.session_state.sound_enabled = True
-                    st.session_state.sound_primed = True
-                    st.rerun()
-            else:
-                st.session_state.sound_enabled = st.toggle(
-                    "알림음 활성화/비활성화", 
-                    value=st.session_state.sound_enabled
-                )
-
-            if st.session_state.sound_enabled:
-                st.success("알림음 활성화 상태")
-            else:
-                st.warning("알림음 비활성화 상태")
-
-    def _render_main_page(self):
-        st.header("항만시설 현장 안전 모니터링")
-        if not st.session_state.latest_alerts and self.collections:
-            try:
-                query = {"type": {"$ne": "normal"}}
-                alerts = list(self.collections['alerts'].find(query).sort("timestamp", pymongo.DESCENDING).limit(5))
-                st.session_state.latest_alerts = alerts
-            except Exception as e:
-                st.error(f"초기 경보 데이터 로드 실패: {e}")
-
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            st.subheader("📡 시스템 현재 상태")
-            status_message = st.session_state.current_status.get("message", "상태 정보 없음")
-            status_time = st.session_state.current_status.get("timestamp", "N/A")
-            st.info(f"{status_message} (마지막 신호: {status_time})")
-        with col2:
-            st.subheader("MQTT 연결 상태")
-            client = self.clients.get('alerts')
-            if client and client.is_connected():
-                st.success("🟢 실시간 수신 중")
-            else:
-                st.error("🔴 연결 끊김")
-
-        st.divider()
-        st.subheader("🚨 최근 경보 내역")
-        if not st.session_state.latest_alerts:
-            st.info("수신된 경보가 없습니다.")
-        else:
-            df = pd.DataFrame(st.session_state.latest_alerts)
-            df['timestamp'] = pd.to_datetime(df['timestamp']).dt.tz_localize('UTC').dt.tz_convert('Asia/Seoul')
-            display_df = df.rename(columns={"timestamp": "발생 시각", "type": "유형", "message": "메시지"})
-            st.dataframe(
-                display_df[['발생 시각', '유형', '메시지']].sort_values(by="발생 시각", ascending=False),
-                width='stretch', hide_index=True
-            )
+        # 새로 감지된 가스가 하나라도 있다면, 요약된 로그를 한 번만 기록합니다.
+        if newly_detected_gases:
+            detected_gases_str = ", ".join(newly_detected_gases)
+            msg = f"🟡 가스 감지됨! [{detected_gases_str}]"
+            log_alert(msg)
 
     def _render_sensor_dashboard(self):
         st.header("실시간 센서 모니터링")
