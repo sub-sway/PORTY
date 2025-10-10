@@ -298,7 +298,7 @@ class UnifiedDashboard:
                 st.button(
                     page_title, 
                     on_click=switch_page, 
-                    args=(page_key,), 
+                    args=(page_key,),
                     width="stretch", 
                     type="primary" if st.session_state.page == page_key else "secondary"
                 )
@@ -359,7 +359,7 @@ class UnifiedDashboard:
             display_df = df.rename(columns={"timestamp": "발생 시각", "type": "유형", "message": "메시지"})
             st.dataframe(
                 display_df[['발생 시각', '유형', '메시지']].sort_values(by="발생 시각", ascending=False),
-                use_container_width=True, hide_index=True
+                width='stretch', hide_index=True
             )
 
     def _render_sensor_dashboard(self):
@@ -471,7 +471,7 @@ class UnifiedDashboard:
                                 # 이전 형식의 로그 호환
                                 log_entries.append({"감지 시간 (KST)": parts[0], "메시지": parts[1].strip()})
                     log_df = pd.DataFrame(log_entries)
-                    st.dataframe(log_df, use_container_width=True, hide_index=True)
+                    st.dataframe(log_df, width='stretch', hide_index=True)
                     
                     st.divider()
                     if st.button("🚨 로그 전체 삭제", type="primary"):
