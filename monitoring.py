@@ -93,13 +93,11 @@ def start_mqtt_clients():
     def on_message_alerts(client, userdata, msg):
         try:
             payload = msg.payload.decode()
-            # [수정] 수신된 메시지를 즉시 로그에 기록하여 확인
             logging.info(f"ALERT TOPIC MESSAGE RECEIVED: {payload}")
             data = json.loads(payload)
             if all(key in data for key in ['type', 'message', 'timestamp']):
                 alerts_queue.put(data)
         except Exception as e:
-            # [수정] 오류 발생 시 원본 페이로드와 함께 더 자세한 로그 기록
             logging.error(f"ALERT MESSAGE PROCESSING FAILED. Error: {e}. Payload: {msg.payload.decode()}", exc_info=True)
 
 
@@ -129,11 +127,9 @@ def start_mqtt_clients():
     def on_message_sensors(client, userdata, msg):
         try:
             payload = msg.payload.decode().strip()
-            # [수정] 수신된 메시지를 즉시 로그에 기록하여 확인
             logging.info(f"SENSOR TOPIC MESSAGE RECEIVED: {payload}")
             sensors_queue.put(payload)
         except Exception as e:
-            # [수정] 오류 발생 시 원본 페이로드와 함께 더 자세한 로그 기록
             logging.error(f"SENSOR MESSAGE PROCESSING FAILED. Error: {e}. Payload: {msg.payload.decode()}", exc_info=True)
 
 
@@ -188,7 +184,6 @@ class UnifiedDashboard:
             
             alert_type = msg.get("type")
             if alert_type in ["fire", "safety"]:
-                # [수정] playsound 대신 세션 상태 트리거 설정
                 if st.session_state.get('sound_enabled', False):
                     st.session_state.play_sound_trigger = alert_type
 
@@ -212,16 +207,32 @@ class UnifiedDashboard:
 
             if self.collections:
                 try:
+                    # MongoDB는 datetime 객체를 자동으로 BSON UTCDateTime으로 변환합니다.
                     self.collections['alerts'].insert_one(msg)
                 except Exception as e:
                     logging.error(f"MongoDB 저장 실패 (alerts): {e}")
 
         # 2. 센서 데이터 큐 처리
+        # [수정] 센서 데이터의 키 순서를 정의합니다.
+        sensor_keys = ["CH4", "EtOH", "H2", "NH3", "CO", "NO2", "Oxygen", "Distance", "Flame"]
         new_data = []
         while not self.sensors_queue.empty():
             payload = self.sensors_queue.get()
             try:
-                data_dict = json.loads(payload)
+                # [수정] 쉼표로 구분된 문자열을 파싱합니다.
+                values = [float(v.strip()) for v in payload.split(',')]
+                
+                # [수정] 값의 개수가 올바른지 확인합니다.
+                if len(values) != len(sensor_keys):
+                    logging.warning(f"센서 데이터 값 개수 불일치: {len(values)}개 수신, {len(sensor_keys)}개 필요 - 페이로드: {payload}")
+                    continue
+
+                # [수정] 키와 값을 짝지어 딕셔너리를 생성합니다.
+                data_dict = dict(zip(sensor_keys, values))
+                
+                # Flame 센서 값은 정수형이어야 합니다.
+                data_dict['Flame'] = int(data_dict['Flame'])
+
                 data_dict['timestamp'] = datetime.now(timezone.utc)
                 self._check_and_trigger_sensor_alerts(data_dict)
                 new_data.append(data_dict)
@@ -230,12 +241,12 @@ class UnifiedDashboard:
                         self.collections['sensors'].insert_one(data_dict)
                     except Exception as e:
                         logging.error(f"MongoDB 저장 실패 (sensors): {e}")
-            except (json.JSONDecodeError, KeyError) as e:
-                logging.warning(f"센서 데이터 파싱 오류: {e} - 페이로드: {payload}")
+            except (ValueError, IndexError) as e:
+                # [수정] 숫자 변환 실패 또는 데이터 형식 오류에 대한 예외 처리를 강화합니다.
+                logging.warning(f"센서 데이터 파싱 오류 (처리 불가): {e} - 페이로드: {payload}")
         
         if new_data:
             new_df = pd.DataFrame(new_data)
-            # FIX: 새로 수신된 데이터의 timestamp를 timezone-aware UTC로 변환합니다.
             new_df['timestamp'] = pd.to_datetime(new_df['timestamp'])
             if new_df['timestamp'].dt.tz is None:
                 new_df['timestamp'] = new_df['timestamp'].dt.tz_localize('UTC')
@@ -243,15 +254,13 @@ class UnifiedDashboard:
                 new_df['timestamp'] = new_df['timestamp'].dt.tz_convert('UTC')
 
             st.session_state.live_df = pd.concat([st.session_state.live_df, new_df], ignore_index=True)
-            if len(st.session_state.live_df) > 1000: # 메모리 관리를 위해 데이터프레임 크기 제한
+            if len(st.session_state.live_df) > 1000:
                 st.session_state.live_df = st.session_state.live_df.iloc[-1000:]
 
 
     def _check_and_trigger_sensor_alerts(self, data_dict):
         def log_alert(message):
             try:
-                # 배포 환경의 파일 시스템은 임시적이므로, 중요한 로그는 외부 서비스로 보내는 것이 좋습니다.
-                # 여기서는 st.info를 사용해 화면에 표시하고, 파일 로그는 best-effort로 남깁니다.
                 logging.info(f"EVENT LOGGED: {message}")
                 with open(LOG_FILE, "a", encoding="utf-8") as log_file:
                     log_file.write(f"{datetime.now(timezone.utc).isoformat()} - {message}\n")
@@ -272,7 +281,6 @@ class UnifiedDashboard:
         if oxygen_val is not None and not (OXYGEN_SAFE_MIN <= oxygen_val <= OXYGEN_SAFE_MAX):
             msg = f"🟠 산소 농도 경고! 현재 값: {oxygen_val:.1f}%"
             log_alert(msg)
-            # 산소 농도 경고는 소리 없이 토스트만 표시
             st.toast(msg, icon="🟠")
             
         no2_val = data_dict.get("NO2")
@@ -280,7 +288,7 @@ class UnifiedDashboard:
             if no2_val >= NO2_DANGER_LIMIT:
                 msg = f"🔴 이산화질소(NO2) 위험! 현재 값: {no2_val:.3f} ppm"
                 log_alert(msg)
-                trigger_ui_alert(msg, "🔴", "safety") # 안전 경보음 사용
+                trigger_ui_alert(msg, "🔴", "safety")
             elif no2_val >= NO2_WARN_LIMIT:
                 msg = f"🟡 이산화질소(NO2) 주의! 현재 값: {no2_val:.3f} ppm"
                 log_alert(msg)
@@ -379,8 +387,6 @@ class UnifiedDashboard:
                 records = list(self.collections['sensors'].find().sort("timestamp", -1).limit(1000))
                 if records:
                     temp_df = pd.DataFrame(reversed(records))
-                    # FIX: DB에서 불러온 데이터의 timestamp를 timezone-aware UTC로 변환합니다.
-                    # 이렇게 하면 DB에 timezone 정보가 없는 과거 데이터가 있어도 오류가 발생하지 않습니다.
                     temp_df['timestamp'] = pd.to_datetime(temp_df['timestamp'])
                     if temp_df['timestamp'].dt.tz is None:
                         temp_df['timestamp'] = temp_df['timestamp'].dt.tz_localize('UTC')
@@ -446,7 +452,6 @@ class UnifiedDashboard:
             st.divider()
             st.subheader("📈 센서별 실시간 변화 추세")
             if 'timestamp' in df.columns:
-                # FIX: timestamp 열이 이미 datetime 객체이므로 별도 변환 없이 바로 사용합니다.
                 sensors_for_graph = ["CH4", "EtOH", "H2", "NH3", "CO", "NO2", "Oxygen", "Distance"]
                 for i in range(0, len(sensors_for_graph), 2):
                     graph_cols = st.columns(2)
@@ -455,7 +460,6 @@ class UnifiedDashboard:
                             with graph_cols[j]:
                                 fig = px.line(df, x="timestamp", y=sensor, title=f"{sensor} 변화 추세")
                                 fig.update_layout(margin=dict(l=20, r=20, t=40, b=20), xaxis_title="시간", yaxis_title="값")
-                                # FIX: `width`를 `use_container_width`로 변경하여 경고 메시지를 우회합니다.
                                 st.plotly_chart(fig, use_container_width=True)
 
     def _render_sensor_log_page(self):
@@ -478,7 +482,6 @@ class UnifiedDashboard:
                                     "메시지": parts[1].strip()
                                 })
                             except ValueError:
-                                # 이전 형식의 로그 호환
                                 log_entries.append({"감지 시간 (KST)": parts[0], "메시지": parts[1].strip()})
                     log_df = pd.DataFrame(log_entries)
                     st.dataframe(log_df, width='stretch', hide_index=True)
@@ -496,9 +499,6 @@ class UnifiedDashboard:
             st.info("👍 아직 감지된 이벤트가 없어 로그 파일이 생성되지 않았습니다.")
 
     def _handle_audio_playback(self):
-        # [추가] 클라이언트 측 오디오 재생을 위한 HTML/JS 코드 삽입
-        # 1. 오디오 파일을 미리 로드하기 위한 <audio> 태그를 숨겨서 삽입합니다.
-        #    이 경로는 배포된 앱의 루트를 기준으로 합니다.
         st.html("""
             <audio id="fire-alert-sound" preload="auto">
                 <source src="app/static/fire_cut_mp3.mp3" type="audio/mpeg">
@@ -508,14 +508,12 @@ class UnifiedDashboard:
             </audio>
         """)
 
-        # 2. 세션 상태의 트리거를 확인하고, 설정되었다면 소리를 재생하는 JS를 실행합니다.
         if trigger := st.session_state.play_sound_trigger:
             if trigger == "fire":
                 st.html("<script>document.getElementById('fire-alert-sound').play();</script>")
             elif trigger == "safety":
                 st.html("<script>document.getElementById('safety-alert-sound').play();</script>")
             
-            # 3. 한 번 재생 후 트리거를 리셋하여 반복 재생을 방지합니다.
             st.session_state.play_sound_trigger = None
 
 
@@ -532,14 +530,10 @@ class UnifiedDashboard:
         elif page == 'sensor_log':
             self._render_sensor_log_page()
         
-        # [추가] 오디오 재생 로직을 매 실행마다 호출
         self._handle_audio_playback()
         
         st_autorefresh(interval=2000, key="refresher")
 
 if __name__ == "__main__":
-    # Streamlit Cloud에서는 이 파일을 직접 실행합니다.
-    # 로컬에서 실행할 때도 동일하게 작동합니다.
     app = UnifiedDashboard()
     app.run()
-
