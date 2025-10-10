@@ -21,7 +21,7 @@ if not logger.handlers:
     logger.addHandler(handler)
 
 # --- 알림음 종류별 Base64 데이터 ---
-FIRE_ALARM_SOUND_BASE64 = "data:audio/wav;base64,UklGRiSAAQBXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAAABkYXRhgQEAIAAAAAYWGRo3doN1l3p8gH+Cf4J/in+LgY2Pjp+RlpWXl5iYmJeXlpeXlpeXlpeXlpeXlpeXl5eXl5aXk5iUlpWXl5aXlpeVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWV"
+FIRE_ALARM_SOUND_BASE64 = "data:audio/wav;base64,UklGRiSAAQBXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAAABkYXRhgQEAIAAAAAYWGRo3doN1l3p8gH+Cf4J/in+LgY2Pjp+RlpWXl5iYmJeXlpeXlpeXlpeXlpeXlpeXl5eXl5aXk5iUlpWXl5aXlpeVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVlJWVl-Q"
 SAFETY_ALERT_SOUND_BASE64 = "data:audio/mpeg;base64,SUQzBAAAAAAAIVRYdEnDTPOq/3/3v/2/gAAAAAAAAAAAAAAB/2/g2/gAAA4SAAAEzGgAAAAAAD+kAzYAAAAAAAnnjk8eDEGANjBEyA/IjsgEyA7YEKkC5AlMBNkG/g2/gAAAAAAAAAAAAAAB/2/g2/gAAAA4SAAAEzGgAAAAAAD+kAzYAAAAAAAnnjk8eDEGANjBEyA/IjsgEyA7YEKkC5AlMBNk"
 
 # --- 설정 ---
@@ -69,11 +69,9 @@ def start_mqtt_client(_message_queue):
     def on_message(client, userdata, msg):
         try:
             payload = msg.payload.decode()
-            logger.info(f"MQTT 메시지 수신 (토픽: '{msg.topic}'): {payload}")
             data = json.loads(payload)
             if all(key in data for key in ['type', 'message', 'timestamp']):
                 _message_queue.put(data)
-                logger.info("유효한 메시지를 큐에 추가했습니다.")
         except (json.JSONDecodeError, TypeError):
             pass
 
@@ -83,9 +81,7 @@ def start_mqtt_client(_message_queue):
     client.tls_set(cert_reqs=ssl.CERT_NONE)
     client.on_connect = on_connect
     client.on_message = on_message
-    
     try:
-        logger.info("MQTT 브로커에 연결을 시도합니다...")
         client.connect(HIVE_BROKER, HIVE_PORT, 60)
         client.loop_start()
         return client
@@ -100,7 +96,6 @@ def play_notification_sound(sound_type="safety"):
         sound_data = FIRE_ALARM_SOUND_BASE64
     else:
         sound_data = SAFETY_ALERT_SOUND_BASE64
-    
     audio_html = f'<audio autoplay><source src="{sound_data}" type="audio/mpeg"></audio>'
     st.html(audio_html)
 
@@ -116,10 +111,13 @@ if "current_status" not in st.session_state:
     st.session_state.current_status = {"message": "데이터 수신 대기 중...", "timestamp": "N/A"}
 if "last_message_time" not in st.session_state:
     st.session_state.last_message_time = datetime.datetime.now()
+# [핵심 1] 소리 활성화 상태를 저장할 변수 추가
+if "sound_enabled" not in st.session_state:
+    st.session_state.sound_enabled = False
 
 # --- 자동 재연결 로직 ---
 time_since_last_message = (datetime.datetime.now() - st.session_state.last_message_time).total_seconds()
-if time_since_last_message > CONNECTION_TIMEOUT_SECONDS:
+if mqtt_client and time_since_last_message > CONNECTION_TIMEOUT_SECONDS:
     st.warning(f"{CONNECTION_TIMEOUT_SECONDS}초 이상 신호 없음. MQTT 재연결을 시도합니다...")
     logger.warning("MQTT 연결 시간 초과. 모든 캐시를 지우고 재연결을 시도합니다.")
     st.cache_resource.clear()
@@ -130,17 +128,36 @@ if time_since_last_message > CONNECTION_TIMEOUT_SECONDS:
 st.title("🛡️ 항만시설 현장 안전 모니터링")
 logger.info("================ 스트림릿 앱 UI 렌더링 ================")
 
+# --- [핵심 2] 사이드바에 소리 활성화 버튼 추가 ---
+with st.sidebar:
+    st.header("설정")
+    st.info("브라우저 정책으로 인해, 알림음을 들으시려면 먼저 아래 버튼을 눌러 소리를 활성화해야 합니다.")
+    if st.button("🔔 알림음 활성화", use_container_width=True):
+        st.session_state.sound_enabled = True
+        play_notification_sound() # 버튼 클릭 시 테스트 소리 재생
+        st.toast("✅ 알림음이 활성화되었습니다.")
+    
+    if st.session_state.sound_enabled:
+        st.success("알림음 활성화 상태")
+    else:
+        st.warning("알림음 비활성화 상태")
+
 # --- 메인 로직: 큐에서 메시지 처리 ---
 if db_collection is not None:
     while not message_queue.empty():
         msg = message_queue.get()
         st.session_state.last_message_time = datetime.datetime.now()
-        logger.info(f"큐에서 메시지 처리 시작: {msg.get('type')}")
         
         alert_type = msg.get("type")
-        if alert_type in ["fire", "safety"]:
+        # [핵심 3] 소리가 활성화된 상태에서만 알림음 재생
+        if alert_type in ["fire", "safety"] and st.session_state.sound_enabled:
             play_notification_sound(alert_type)
-            st.toast(f"🚨 {msg.get('message')}", icon="🔥" if alert_type == "fire" else "⚠️")
+        
+        # 팝업은 소리 활성화 여부와 관계없이 항상 표시
+        if alert_type == "fire":
+            st.toast(f"🔥 긴급: 화재 경보 발생!", icon="🔥")
+        elif alert_type == "safety":
+            st.toast(f"⚠️ 주의: 안전조끼 미착용 감지!", icon="⚠️")
         
         if alert_type == "normal":
             st.session_state.current_status = msg
@@ -162,17 +179,15 @@ if db_collection is not None:
             db_collection.insert_one(msg)
             logger.info("메시지를 MongoDB에 성공적으로 저장했습니다.")
         except Exception as e:
-            st.warning(f"DB 저장 실패! 화면에는 표시됩니다. ({e})")
+            st.warning(f"DB 저장 실패! ({e})")
             logger.error(f"MongoDB 저장 실패: {e}")
 
 # --- 초기 데이터 로드 ---
 if not st.session_state.latest_alerts and db_collection is not None:
     try:
-        logger.info("초기 데이터 로드를 위해 DB를 조회합니다...")
         query = {"type": {"$ne": "normal"}}
-        alerts = list(db_collection.find(query).sort("timestamp", pymongo.DESCENDING).limit(5))
+        alerts = list(db_collection.find(query).sort("timestamp", pymongo.DESCENDING).limit(10))
         st.session_state.latest_alerts = alerts
-        logger.info(f"초기 데이터 {len(alerts)}건을 DB에서 로드했습니다.")
     except Exception as e:
         st.error(f"초기 데이터 로드 실패: {e}")
 
@@ -197,16 +212,14 @@ if not st.session_state.latest_alerts:
     st.info("수신된 경보가 없습니다.")
 else:
     df = pd.DataFrame(st.session_state.latest_alerts)
-    df['timestamp'] = pd.to_datetime(df['timestamp']).dt.tz_localize('UTC').dt.tz_convert('Asia/Seoul')
-    
-    display_df = df.rename(columns={
-        "timestamp": "발생 시각", "type": "유형", "message": "메시지"
-    })
-    
-    st.dataframe(
-        display_df[['발생 시각', '유형', '메시지']].sort_values(by="발생 시각", ascending=False),
-        width='stretch',
-        hide_index=True
-    )
+    if 'timestamp' in df.columns:
+        df['timestamp'] = pd.to_datetime(df['timestamp']).dt.tz_localize('UTC').dt.tz_convert('Asia/Seoul')
+        display_df = df.rename(columns={"timestamp": "발생 시각", "type": "유형", "message": "메시지"})
+        st.dataframe(
+            display_df[['발생 시각', '유형', '메시지']].sort_values(by="발생 시각", ascending=False),
+            use_container_width=True,
+            hide_index=True
+        )
 
 st_autorefresh(interval=2000, key="ui_refresher")
+
