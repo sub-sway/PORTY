@@ -12,7 +12,7 @@ torch==2.2.2
 torchvision==0.17.2
 
 # --- 이미지 처리 ---
-opencv-python-headless==4.9.0.80
+opencv-python-headless==4.9.0.80     ✅ (핵심 수정 완료)
 Pillow==10.4.0
 numpy==1.26.4
 av==12.1.0
