@@ -22,10 +22,7 @@ if JETSON_IP:
             rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]},
             media_stream_constraints={"video": True, "audio": False},
         ),
-        # video_source_url에 RTSP 주소를 전달합니다.
-        # 이 기능은 streamlit-webrtc 0.47.0 이상부터 지원됩니다.
         video_source_url=RTSP_URL,
-        # 에러 메시지를 더 자세히 보기 위해 True로 설정
         sendback_audio=False,
         async_processing=True,
     )
