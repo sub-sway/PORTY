@@ -12,7 +12,7 @@ torch==2.2.2
 torchvision==0.17.2
 
 # --- 이미지 처리 ---
-opencv-python-headless==4.9.0.80
+opencv-python==4.9.0.80
 Pillow==10.4.0
 numpy==1.26.4
 av==12.1.0
@@ -23,7 +23,6 @@ pymongo==4.8.0
 # --- 기타 유틸 ---
 python-multipart==0.0.9
 requests==2.32.3
-
 
 # --- 타입 및 경고 방지 ---
 typing-extensions==4.12.2
