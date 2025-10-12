@@ -4,7 +4,7 @@ import base64
 from datetime import datetime
 
 # --- 설정 ---
-MONGO_URI = "mongodb://localhost:27017/"
+MONGO_URI = "mongodb+srv://jystarwow_db_user:zf01VaAW4jYH0dVP@porty.oqiwzud.mongodb.net/"
 DB_NAME = "crack_monitor"
 COLLECTION_NAME = "crack_results"
 
