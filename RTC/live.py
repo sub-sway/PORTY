@@ -1,5 +1,5 @@
 import streamlit as st
-from streamlit_webrtc import webrtc_streamer, WebRtcMode, ClientSettings
+from streamlit_webrtc import webrtc_streamer, WebRtcMode
 
 # --- 페이지 설정 ---
 st.set_page_config(page_title="Jetson RTSP 스트리밍", layout="wide")
@@ -14,17 +14,17 @@ if JETSON_IP:
 
     st.info(f"아래 박스에서 RTSP 스트리밍을 시작하세요. URL: {RTSP_URL}")
 
-    # streamlit-webrtc를 사용하여 RTSP 스트림을 재생합니다.
+    # 가장 기본적인 형태로 webrtc_streamer 호출
     webrtc_streamer(
         key="jetson-rtsp",
         mode=WebRtcMode.RECVONLY,
-        client_settings=ClientSettings(
-            rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]},
-            media_stream_constraints={"video": True, "audio": False},
-        ),
-        video_source_url=RTSP_URL,
-        sendback_audio=False,
-        async_processing=True,
+        rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]},
+        media_stream_constraints={"video": True, "audio": False},
+        # 이전 코드의 video_source_url 대신, 이 방식이 더 안정적일 수 있습니다.
+        # Video stream source from a media file on the server side
+        # source_video_track=MediaPlayer(RTSP_URL).video,
+        # 위 방식 대신 더 직접적인 방법을 사용합니다.
+        video_source_url=RTSP_URL
     )
 else:
     st.warning("Jetson Orin IP 주소를 입력해주세요.")
