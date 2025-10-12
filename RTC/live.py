@@ -52,4 +52,4 @@ with col2:
     if st.button("⏹ 스트리밍 중지"):
         stop_flag = True
         time.sleep(1)
-        st.experimental_rerun()
+        st.rerun()
