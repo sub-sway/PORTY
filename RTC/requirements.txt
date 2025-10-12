@@ -23,7 +23,7 @@ pymongo==4.8.0
 # --- 기타 유틸 ---
 python-multipart==0.0.9
 requests==2.32.3
-libgl1-mesa-glx
+
 
 # --- 타입 및 경고 방지 ---
 typing-extensions==4.12.2
