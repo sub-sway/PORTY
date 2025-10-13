@@ -312,7 +312,7 @@ class UnifiedDashboard:
                     page_title, 
                     on_click=switch_page, 
                     args=(page_key,),
-                    width='stretch', 
+                    use_container_width=True, # This component uses `use_container_width`
                     type="primary" if st.session_state.page == page_key else "secondary"
                 )
         st.divider()
@@ -372,7 +372,7 @@ class UnifiedDashboard:
             display_df = df.rename(columns={"timestamp": "발생 시각", "type": "유형", "message": "메시지"})
             st.dataframe(
                 display_df[['발생 시각', '유형', '메시지']].sort_values(by="발생 시각", ascending=False),
-                width='stretch', hide_index=True
+                use_container_width=True, hide_index=True
             )
 
     def _render_sensor_dashboard(self):
@@ -456,7 +456,8 @@ class UnifiedDashboard:
                             with graph_cols[j]:
                                 fig = px.line(df, x="timestamp", y=sensor, title=f"{sensor} 변화 추세")
                                 fig.update_layout(margin=dict(l=20, r=20, t=40, b=20), xaxis_title="시간", yaxis_title="값")
-                                st.plotly_chart(fig, width='stretch')
+                                # This is the corrected line for st.plotly_chart
+                                st.plotly_chart(fig, use_container_width=True)
 
     def _render_sensor_log_page(self):
         st.header("센서 이벤트 로그")
@@ -480,7 +481,7 @@ class UnifiedDashboard:
                             except ValueError:
                                 log_entries.append({"감지 시간 (KST)": parts[0], "메시지": parts[1].strip()})
                     log_df = pd.DataFrame(log_entries)
-                    st.dataframe(log_df, width='stretch', hide_index=True)
+                    st.dataframe(log_df, use_container_width=True, hide_index=True)
                     
                     st.divider()
                     if st.button("🚨 로그 전체 삭제", type="primary"):
