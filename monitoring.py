@@ -460,40 +460,51 @@ class UnifiedDashboard:
                                 st.plotly_chart(fig, use_container_width=True)
 
     def _render_sensor_log_page(self):
-        st.header("센서 이벤트 로그")
-        st.write("불꽃, 위험 가스 농도 등 주요 이벤트가 감지될 때의 기록입니다.")
-        if os.path.exists(LOG_FILE):
-            try:
-                with open(LOG_FILE, "r", encoding="utf-8") as f:
-                    log_lines = f.readlines()
-                if log_lines:
-                    log_entries = []
-                    for line in reversed(log_lines):
-                        if " - " in line:
-                            parts = line.split(" - ", 1)
-                            try:
-                                utc_dt = datetime.fromisoformat(parts[0])
-                                kst_dt = utc_dt.astimezone(timezone(timedelta(hours=9)))
-                                log_entries.append({
-                                    "감지 시간 (KST)": kst_dt.strftime('%Y-%m-%d %H:%M:%S'),
-                                    "메시지": parts[1].strip()
-                                })
-                            except ValueError:
-                                log_entries.append({"감지 시간 (KST)": parts[0], "메시지": parts[1].strip()})
-                    log_df = pd.DataFrame(log_entries)
-                    st.dataframe(log_df, use_container_width=True, hide_index=True)
-                    
-                    st.divider()
-                    if st.button("🚨 로그 전체 삭제", type="primary"):
-                        os.remove(LOG_FILE)
-                        st.success("✅ 모든 로그 기록이 삭제되었습니다.")
-                        st.rerun()
-                else:
-                    st.info("👀 로그 파일이 비어있습니다.")
-            except Exception as e:
-                st.error(f"로그 파일을 읽는 중 오류가 발생했습니다: {e}")
-        else:
-            st.info("👍 아직 감지된 이벤트가 없어 로그 파일이 생성되지 않았습니다.")
+    st.header("센서 이벤트 로그")
+    st.write("불꽃, 위험 가스 농도 등 주요 이벤트가 감지될 때의 기록입니다.")
+    if os.path.exists(LOG_FILE):
+        try:
+            with open(LOG_FILE, "r", encoding="utf-8") as f:
+                log_lines = f.readlines()
+            if log_lines:
+                log_entries = []
+                for line in reversed(log_lines):
+                    if " - " in line:
+                        parts = line.split(" - ", 1)
+                        try:
+                            utc_dt = datetime.fromisoformat(parts[0])
+                            kst_dt = utc_dt.astimezone(timezone(timedelta(hours=9)))
+                            log_entries.append({
+                                "감지 시간 (KST)": kst_dt.strftime('%Y-%m-%d %H:%M:%S'),
+                                "메시지": parts[1].strip()
+                            })
+                        except ValueError:
+                            log_entries.append({"감지 시간 (KST)": parts[0], "메시지": parts[1].strip()})
+                log_df = pd.DataFrame(log_entries)
+                st.dataframe(log_df, use_container_width=True, hide_index=True)
+
+                ### ⬇️ 추가된 부분 — CSV 다운로드 버튼
+                csv_data = log_df.to_csv(index=False).encode('utf-8-sig')
+                st.download_button(
+                    label="📥 로그 CSV 다운로드",
+                    data=csv_data,
+                    file_name=f"sensor_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+                ### ⬆️ 추가된 부분
+
+                st.divider()
+                if st.button("🚨 로그 전체 삭제", type="primary"):
+                    os.remove(LOG_FILE)
+                    st.success("✅ 모든 로그 기록이 삭제되었습니다.")
+                    st.rerun()
+            else:
+                st.info("👀 로그 파일이 비어있습니다.")
+        except Exception as e:
+            st.error(f"로그 파일을 읽는 중 오류가 발생했습니다: {e}")
+    else:
+        st.info("👍 아직 감지된 이벤트가 없어 로그 파일이 생성되지 않았습니다.")
 
     def _handle_audio_playback(self):
         st.html("""
