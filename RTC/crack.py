@@ -3,64 +3,68 @@ import pymongo
 import base64
 from datetime import datetime
 
-# --- 설정 ---
-MONGO_URI = "mongodb+srv://jystarwow_db_user:zf01VaAW4jYH0dVP@porty.oqiwzud.mongodb.net/"
-DB_NAME = "crack_monitor"
-COLLECTION_NAME = "crack_results"
+# --- 페이지 기본 설정 ---
+st.set_page_config(layout="wide", page_title="균열 감지 대시보드")
 
-# --- DB 연결 ---
+# --- MongoDB Atlas 연결 ---
+# st.secrets를 사용하여 .streamlit/secrets.toml 파일의 정보에 접근합니다.
 @st.cache_resource
 def init_connection():
     try:
-        client = pymongo.MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
-        # 연결 테스트
-        client.server_info()
+        # "mongo_uri"는 secrets.toml 파일에 정의한 키(key) 이름입니다.
+        mongo_uri = st.secrets["mongo_uri"]
+        client = pymongo.MongoClient(mongo_uri)
+        client.admin.command('ping') # 연결 테스트
         return client
-    except pymongo.errors.ServerSelectionTimeoutError as err:
-        st.error(f"MongoDB 연결 실패: {err}")
+    except KeyError:
+        st.error("❌ secrets.toml 파일에 'mongo_uri'가 설정되지 않았습니다.")
+        return None
+    except Exception as e:
+        st.error(f"DB 연결 실패: {e}")
         return None
 
 client = init_connection()
 
-# --- Streamlit 페이지 구성 ---
-st.set_page_config(layout="wide")
-st.title("🛣️ 도로 균열 감지 모니터링 대시보드")
+# --- 메인 대시보드 UI ---
+st.title("🛣️ 실시간 도로 균열 감지 대시보드")
 
 if client is None:
-    st.warning("DB에 연결할 수 없어 데이터를 표시할 수 없습니다.")
+    st.warning("데이터베이스에 연결할 수 없어 데이터를 표시할 수 없습니다.")
 else:
-    db = client[DB_NAME]
-    collection = db[COLLECTION_NAME]
+    db = client["crack_monitor"]
+    collection = db["crack_results"]
 
-    st.sidebar.header("필터")
+    st.sidebar.header("🔍 필터 옵션")
     limit = st.sidebar.slider("표시할 최근 항목 수", 1, 100, 10)
 
     if st.sidebar.button("새로고침 🔄"):
         st.rerun()
 
-    st.header(f"최근 감지된 균열 목록 (최대 {limit}개)")
+    st.header(f"최근 감지된 균열 목록 (상위 {limit}개)")
 
-    # DB에서 최신 데이터를 가져와서 표시
-    # timestamp 필드를 기준으로 내림차순 정렬
+    # DB에서 timestamp 필드를 기준으로 최신순 정렬하여 데이터 조회
     for doc in collection.find({}).sort("timestamp", -1).limit(limit):
         
-        with st.expander(f"감지 시간: {doc['timestamp'].strftime('%Y-%m-%d %H:%M:%S')} UTC - 감지된 균열 {doc['num_detections']}개"):
+        # 날짜/시간 포맷 변경
+        timestamp_local = doc['timestamp'].strftime('%Y-%m-%d %H:%M:%S')
+        
+        with st.expander(f"**감지 시간:** {timestamp_local} | **장치:** {doc['source_device']} | **균열 수:** {len(doc['detections'])}"):
             
-            col1, col2 = st.columns([2, 1]) # 이미지 컬럼을 더 넓게
+            col1, col2 = st.columns([2, 1])
             
             with col1:
-                # Base64 이미지를 디코딩하여 표시
+                # Base64 문자열을 이미지로 디코딩하여 표시
                 img_bytes = base64.b64decode(doc['annotated_image_base64'])
                 st.image(img_bytes, caption="감지 결과 이미지", use_column_width=True)
 
             with col2:
-                st.subheader("상세 정보")
+                st.subheader("상세 감지 정보")
                 
                 for i, detection in enumerate(doc['detections']):
-                    st.markdown(f"**균열 #{i+1}**")
                     st.metric(
-                        label=f"종류: {detection['class_name']}",
+                        label=f"#{i+1}: {detection['class_name']}",
                         value=f"{detection['confidence']:.2%}"
                     )
+                    st.code(f"Box: {[int(c) for c in detection['box_xyxy']]}", language="text")
                 
-                st.caption(f"MongoDB ID: {doc['_id']}")
+                st.caption(f"DB ID: {doc['_id']}")
