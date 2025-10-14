@@ -48,7 +48,13 @@ else:
         # 날짜/시간 포맷 변경
         timestamp_local = doc['timestamp'].strftime('%Y-%m-%d %H:%M:%S')
         
-        with st.expander(f"**감지 시간:** {timestamp_local} | **장치:** {doc['source_device']} | **균열 수:** {len(doc['detections'])}"):
+        # ✨ .get()을 사용하여 'source_device'가 없는 경우에도 대비
+        device_name = doc.get('source_device', 'N/A')
+        
+        # ✨ .get()을 사용하여 'detections'가 없는 경우도 안전하게 처리
+        num_detections = len(doc.get('detections', [])) 
+
+        with st.expander(f"**감지 시간:** {timestamp_local} | **장치:** {device_name} | **균열 수:** {num_detections}"):
             
             col1, col2 = st.columns([2, 1])
             
@@ -60,7 +66,8 @@ else:
             with col2:
                 st.subheader("상세 감지 정보")
                 
-                for i, detection in enumerate(doc['detections']):
+                # ✨ .get()을 사용하여 'detections'가 없는 경우 빈 리스트로 처리
+                for i, detection in enumerate(doc.get('detections', [])):
                     st.metric(
                         label=f"#{i+1}: {detection['class_name']}",
                         value=f"{detection['confidence']:.2%}"
