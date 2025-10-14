@@ -51,18 +51,21 @@ except KeyError as e:
 # ==================================
 @st.cache_resource
 def get_alerts_queue():
+    """알림 메시지를 위한 큐를 생성하고 반환합니다."""
     return queue.Queue()
 
 @st.cache_resource
 def get_sensors_queue():
+    """센서 데이터를 위한 큐를 생성하고 반환합니다."""
     return queue.Queue()
 
 @st.cache_resource
 def get_mongo_collections():
+    """MongoDB에 연결하고 데이터베이스 컬렉션 객체를 반환합니다."""
     try:
         logging.info("MongoDB에 연결을 시도합니다...")
         client = pymongo.MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
-        client.server_info()
+        client.server_info()  # 연결 테스트
         logging.info("MongoDB 연결 성공.")
         alerts_db = client[ALERTS_DB_NAME]
         sensors_db = client[SENSORS_DB_NAME]
@@ -77,8 +80,9 @@ def get_mongo_collections():
 
 @st.cache_resource
 def start_mqtt_clients():
+    """알림 및 센서 데이터 수신을 위한 MQTT 클라이언트를 시작합니다."""
     clients = {}
-    
+
     # 1. 안전 모니터링 클라이언트 (WebSockets)
     alerts_queue = get_alerts_queue()
     def on_connect_alerts(client, userdata, flags, rc, properties=None):
@@ -97,7 +101,6 @@ def start_mqtt_clients():
                 alerts_queue.put(data)
         except Exception as e:
             logging.error(f"ALERT MESSAGE PROCESSING FAILED. Error: {e}. Payload: {msg.payload.decode()}", exc_info=True)
-
 
     try:
         alerts_client = mqtt.Client(client_id=f"st-alerts-{random.randint(0, 1000)}", transport="websockets", callback_api_version=mqtt.CallbackAPIVersion.VERSION2)
@@ -130,7 +133,6 @@ def start_mqtt_clients():
         except Exception as e:
             logging.error(f"SENSOR MESSAGE PROCESSING FAILED. Error: {e}. Payload: {msg.payload.decode()}", exc_info=True)
 
-
     try:
         sensors_client = mqtt.Client(client_id=f"st-sensors-{random.randint(0, 1000)}", callback_api_version=mqtt.CallbackAPIVersion.VERSION2)
         sensors_client.username_pw_set(HIVE_USERNAME_SENSORS, HIVE_PASSWORD_SENSORS)
@@ -147,12 +149,14 @@ def start_mqtt_clients():
 
     return clients
 
-
 # ==================================
 # Streamlit 앱 클래스
 # ==================================
 class UnifiedDashboard:
+    """통합 안전 모니터링 대시보드 Streamlit 앱"""
+
     def __init__(self):
+        """앱 초기화"""
         st.set_page_config(page_title="통합 안전 모니터링 대시보드", layout="wide")
         self.collections = get_mongo_collections()
         self.clients = start_mqtt_clients()
@@ -161,6 +165,7 @@ class UnifiedDashboard:
         self._initialize_state()
 
     def _initialize_state(self):
+        """세션 상태 변수 초기화"""
         defaults = {
             'page': 'main',
             'latest_alerts': [],
@@ -169,17 +174,18 @@ class UnifiedDashboard:
             'live_df': pd.DataFrame(),
             'last_sensor_values': {"CH4": 0.0, "EtOH": 0.0, "H2": 0.0, "NH3": 0.0, "CO": 0.0},
             'sound_primed': False,
-            'play_sound_trigger': None, # 'fire', 'safety', or None
+            'play_sound_trigger': None,  # 'fire', 'safety', 또는 None
         }
         for key, value in defaults.items():
             if key not in st.session_state:
                 st.session_state[key] = value
 
     def _process_queues(self):
+        """MQTT 메시지 큐를 처리하여 데이터를 업데이트합니다."""
         # 1. 안전 경보 큐 처리
         while not self.alerts_queue.empty():
             msg = self.alerts_queue.get()
-            
+
             alert_type = msg.get("type")
             if alert_type in ["fire", "safety"]:
                 if st.session_state.get('sound_enabled', False):
@@ -189,7 +195,7 @@ class UnifiedDashboard:
                     st.toast("🔥 긴급: 화재 경보 발생!", icon="🔥")
                 elif alert_type == "safety":
                     st.toast("⚠️ 주의: 안전조끼 미착용 감지!", icon="⚠️")
-            
+
             if msg.get("type") == "normal":
                 st.session_state.current_status = msg
                 continue
@@ -205,7 +211,7 @@ class UnifiedDashboard:
 
             if self.collections:
                 try:
-                    self.collections['alerts'].insert_one(msg)
+                    self.collections['alerts'].insert_one(msg.copy())
                 except Exception as e:
                     logging.error(f"MongoDB 저장 실패 (alerts): {e}")
 
@@ -216,18 +222,17 @@ class UnifiedDashboard:
             payload = self.sensors_queue.get()
             try:
                 values = [float(v.strip()) for v in payload.split(',')]
-                
+
                 if len(values) != len(sensor_keys):
                     logging.warning(f"센서 데이터 값 개수 불일치: {len(values)}개 수신, {len(sensor_keys)}개 필요 - 페이로드: {payload}")
                     continue
 
                 data_dict = dict(zip(sensor_keys, values))
-                
                 data_dict['Flame'] = int(data_dict['Flame'])
-
                 data_dict['timestamp'] = datetime.now(timezone.utc)
                 self._check_and_trigger_sensor_alerts(data_dict)
                 new_data.append(data_dict)
+
                 if self.collections:
                     try:
                         self.collections['sensors'].insert_one(data_dict.copy())
@@ -235,10 +240,11 @@ class UnifiedDashboard:
                         logging.error(f"MongoDB 저장 실패 (sensors): {e}")
             except (ValueError, IndexError) as e:
                 logging.warning(f"센서 데이터 파싱 오류 (처리 불가): {e} - 페이로드: {payload}")
-        
+
         if new_data:
             new_df = pd.DataFrame(new_data)
             new_df['timestamp'] = pd.to_datetime(new_df['timestamp'])
+            
             if new_df['timestamp'].dt.tz is None:
                 new_df['timestamp'] = new_df['timestamp'].dt.tz_localize('UTC')
             else:
@@ -249,6 +255,7 @@ class UnifiedDashboard:
                 st.session_state.live_df = st.session_state.live_df.iloc[-1000:]
 
     def _check_and_trigger_sensor_alerts(self, data_dict):
+        """센서 데이터를 확인하고 조건에 따라 경고를 발생시킵니다."""
         def log_alert(message):
             try:
                 logging.info(f"EVENT LOGGED: {message}")
@@ -267,12 +274,12 @@ class UnifiedDashboard:
             msg = "🔥 긴급: 불꽃 감지됨! 즉시 확인이 필요합니다!"
             log_alert(msg)
             trigger_ui_alert(msg, "🔥", "fire")
-        
+
         oxygen_val = data_dict.get("Oxygen")
         if oxygen_val is not None and not (OXYGEN_SAFE_MIN <= oxygen_val <= OXYGEN_SAFE_MAX):
             msg = f"🟠 산소 농도 경고! 현재 값: {oxygen_val:.1f}%"
             log_alert(msg)
-            
+        
         no2_val = data_dict.get("NO2")
         if no2_val is not None:
             if no2_val >= NO2_DANGER_LIMIT:
@@ -281,11 +288,11 @@ class UnifiedDashboard:
             elif no2_val >= NO2_WARN_LIMIT:
                 msg = f"🟡 이산화질소(NO2) 주의! 현재 값: {no2_val:.3f} ppm"
                 log_alert(msg)
-        
+
         # 여러 가스 동시 감지 시, 하나의 로그로 통합
         newly_detected_gases = []
         gas_sensors = ["CH4", "EtOH", "H2", "NH3", "CO"]
-        
+
         for sensor in gas_sensors:
             new_value = data_dict.get(sensor, 0.0)
             if new_value > 0 and st.session_state.last_sensor_values.get(sensor, 0.0) == 0:
@@ -299,29 +306,31 @@ class UnifiedDashboard:
             log_alert(msg)
 
     def _render_header_and_nav(self):
+        """페이지 상단의 제목과 네비게이션 버튼을 렌더링합니다."""
         st.title("🛡️ 통합 안전 모니터링 대시보드")
         cols = st.columns(3)
         pages = {'main': '🏠 메인 대시보드', 'sensor_dashboard': '📈 실시간 센서 모니터링', 'sensor_log': '📜 센서 이벤트 로그'}
-        
+
         def switch_page(page_key):
             st.session_state.page = page_key
 
         for i, (page_key, page_title) in enumerate(pages.items()):
             with cols[i]:
                 st.button(
-                    page_title, 
-                    on_click=switch_page, 
+                    page_title,
+                    on_click=switch_page,
                     args=(page_key,),
-                    use_container_width=True, # This component uses `use_container_width`
+                    use_container_width=True,
                     type="primary" if st.session_state.page == page_key else "secondary"
                 )
         st.divider()
-    
+
     def _render_sidebar(self):
+        """사이드바의 설정 옵션을 렌더링합니다."""
         with st.sidebar:
             st.header("⚙️ 설정")
             st.info("브라우저 정책으로 인해, 알림음을 들으시려면 먼저 아래 버튼을 눌러 오디오를 활성화해야 합니다.")
-            
+
             if not st.session_state.sound_primed:
                 if st.button("🔔 알림음 활성화 (최초 1회 클릭)"):
                     st.session_state.sound_enabled = True
@@ -329,7 +338,7 @@ class UnifiedDashboard:
                     st.rerun()
             else:
                 st.session_state.sound_enabled = st.toggle(
-                    "알림음 활성화/비활성화", 
+                    "알림음 활성화/비활성화",
                     value=st.session_state.sound_enabled
                 )
 
@@ -339,6 +348,7 @@ class UnifiedDashboard:
                 st.warning("알림음 비활성화 상태")
 
     def _render_main_page(self):
+        """메인 대시보드 페이지를 렌더링합니다."""
         st.header("항만시설 현장 안전 모니터링")
         if not st.session_state.latest_alerts and self.collections:
             try:
@@ -376,6 +386,7 @@ class UnifiedDashboard:
             )
 
     def _render_sensor_dashboard(self):
+        """실시간 센서 모니터링 페이지를 렌더링합니다."""
         st.header("실시간 센서 모니터링")
         df = st.session_state.live_df
         if df.empty and self.collections:
@@ -388,7 +399,7 @@ class UnifiedDashboard:
                         temp_df['timestamp'] = temp_df['timestamp'].dt.tz_localize('UTC')
                     else:
                         temp_df['timestamp'] = temp_df['timestamp'].dt.tz_convert('UTC')
-                    
+
                     st.session_state.live_df = temp_df
                     df = st.session_state.live_df
             except Exception as e:
@@ -456,57 +467,56 @@ class UnifiedDashboard:
                             with graph_cols[j]:
                                 fig = px.line(df, x="timestamp", y=sensor, title=f"{sensor} 변화 추세")
                                 fig.update_layout(margin=dict(l=20, r=20, t=40, b=20), xaxis_title="시간", yaxis_title="값")
-                                # This is the corrected line for st.plotly_chart
                                 st.plotly_chart(fig, use_container_width=True)
 
     def _render_sensor_log_page(self):
-    st.header("센서 이벤트 로그")
-    st.write("불꽃, 위험 가스 농도 등 주요 이벤트가 감지될 때의 기록입니다.")
-    if os.path.exists(LOG_FILE):
-        try:
-            with open(LOG_FILE, "r", encoding="utf-8") as f:
-                log_lines = f.readlines()
-            if log_lines:
-                log_entries = []
-                for line in reversed(log_lines):
-                    if " - " in line:
-                        parts = line.split(" - ", 1)
-                        try:
-                            utc_dt = datetime.fromisoformat(parts[0])
-                            kst_dt = utc_dt.astimezone(timezone(timedelta(hours=9)))
-                            log_entries.append({
-                                "감지 시간 (KST)": kst_dt.strftime('%Y-%m-%d %H:%M:%S'),
-                                "메시지": parts[1].strip()
-                            })
-                        except ValueError:
-                            log_entries.append({"감지 시간 (KST)": parts[0], "메시지": parts[1].strip()})
-                log_df = pd.DataFrame(log_entries)
-                st.dataframe(log_df, use_container_width=True, hide_index=True)
+        """센서 이벤트 로그 페이지를 렌더링합니다."""
+        st.header("센서 이벤트 로그")
+        st.write("불꽃, 위험 가스 농도 등 주요 이벤트가 감지될 때의 기록입니다.")
+        if os.path.exists(LOG_FILE):
+            try:
+                with open(LOG_FILE, "r", encoding="utf-8") as f:
+                    log_lines = f.readlines()
+                if log_lines:
+                    log_entries = []
+                    for line in reversed(log_lines):
+                        if " - " in line:
+                            parts = line.split(" - ", 1)
+                            try:
+                                utc_dt = datetime.fromisoformat(parts[0])
+                                kst_dt = utc_dt.astimezone(timezone(timedelta(hours=9)))
+                                log_entries.append({
+                                    "감지 시간 (KST)": kst_dt.strftime('%Y-%m-%d %H:%M:%S'),
+                                    "메시지": parts[1].strip()
+                                })
+                            except ValueError:
+                                log_entries.append({"감지 시간 (KST)": parts[0], "메시지": parts[1].strip()})
+                    log_df = pd.DataFrame(log_entries)
+                    st.dataframe(log_df, use_container_width=True, hide_index=True)
 
-                ### ⬇️ 추가된 부분 — CSV 다운로드 버튼
-                csv_data = log_df.to_csv(index=False).encode('utf-8-sig')
-                st.download_button(
-                    label="📥 로그 CSV 다운로드",
-                    data=csv_data,
-                    file_name=f"sensor_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                    mime="text/csv",
-                    use_container_width=True
-                )
-                ### ⬆️ 추가된 부분
-
-                st.divider()
-                if st.button("🚨 로그 전체 삭제", type="primary"):
-                    os.remove(LOG_FILE)
-                    st.success("✅ 모든 로그 기록이 삭제되었습니다.")
-                    st.rerun()
-            else:
-                st.info("👀 로그 파일이 비어있습니다.")
-        except Exception as e:
-            st.error(f"로그 파일을 읽는 중 오류가 발생했습니다: {e}")
-    else:
-        st.info("👍 아직 감지된 이벤트가 없어 로그 파일이 생성되지 않았습니다.")
+                    csv_data = log_df.to_csv(index=False).encode('utf-8-sig')
+                    st.download_button(
+                        label="📥 로그 CSV 다운로드",
+                        data=csv_data,
+                        file_name=f"sensor_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                        mime="text/csv",
+                        use_container_width=True
+                    )
+                    
+                    st.divider()
+                    if st.button("🚨 로그 전체 삭제", type="primary"):
+                        os.remove(LOG_FILE)
+                        st.success("✅ 모든 로그 기록이 삭제되었습니다.")
+                        st.rerun()
+                else:
+                    st.info("👀 로그 파일이 비어있습니다.")
+            except Exception as e:
+                st.error(f"로그 파일을 읽는 중 오류가 발생했습니다: {e}")
+        else:
+            st.info("👍 아직 감지된 이벤트가 없어 로그 파일이 생성되지 않았습니다.")
 
     def _handle_audio_playback(self):
+        """경고음 재생을 처리합니다."""
         st.html("""
             <audio id="fire-alert-sound" preload="auto">
                 <source src="app/static/fire_cut_mp3.mp3" type="audio/mpeg">
@@ -525,6 +535,7 @@ class UnifiedDashboard:
             st.session_state.play_sound_trigger = None
 
     def run(self):
+        """Streamlit 앱을 실행합니다."""
         self._render_header_and_nav()
         self._render_sidebar()
         self._process_queues()
