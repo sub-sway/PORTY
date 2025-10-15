@@ -608,64 +608,53 @@ class UnifiedDashboard:
             st.warning("데이터베이스에 연결할 수 없어 안전 조끼 데이터를 표시할 수 없습니다.")
 
     def _handle_audio_playback(self):
-        """경고음 재생을 처리합니다. (Web Audio API 사용, 파일 필요 없음)"""
+        """
+        지정된 경로의 .wav 파일을 Base64로 인코딩하여 재생합니다.
+        """
         
-        # 1. 브라우저에 소리를 생성하는 JavaScript 코드 주입
-        st.html("""
-            <script>
-                // 오디오 작업을 위한 전역 컨텍스트 생성 (최초 1회만 실행됨)
-                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        # 1. 트리거가 없으면 함수를 즉시 종료
+        if not (trigger := st.session_state.play_sound_trigger):
+            return
 
-                // 삐-뽀- 삐-뽀- 하는 화재 경보음 생성 함수
-                function playFireAlert() {
-                    if (!audioContext) return;
-                    let highTone = 900;
-                    let lowTone = 500;
-                    let duration = 0.15; // 각 톤의 지속 시간 (초)
-                    let startTime = audioContext.currentTime;
+        # 2. 알림음이 비활성화 상태이면 경고 메시지만 표시
+        if not st.session_state.get('sound_enabled', False):
+            st.toast("⚠️ 알림음을 들으려면 사이드바에서 '알림음 활성화'를 켜주세요.")
+            st.session_state.play_sound_trigger = None # 트리거 초기화
+            return
 
-                    for (let i = 0; i < 4; i++) { // 4번 반복 (삐-뽀- 삐-뽀-)
-                        const osc = audioContext.createOscillator();
-                        osc.type = 'sawtooth'; // 사이렌과 비슷한 거친 톤
-                        osc.frequency.setValueAtTime(i % 2 === 0 ? highTone : lowTone, startTime + i * duration);
-                        osc.connect(audioContext.destination);
-                        osc.start(startTime + i * duration);
-                        osc.stop(startTime + (i + 1) * duration);
-                    }
-                }
+        # 3. 트리거 종류에 따라 파일 이름 결정
+        if trigger == 'fire':
+            filename = 'fire_alert.wav'
+        elif trigger == 'safety':
+            filename = 'safety_alert.wav'
+        else:
+            st.session_state.play_sound_trigger = None # 모르는 트리거면 초기화
+            return
 
-                // 삑! 하는 단일 주의음 생성 함수
-                function playSafetyAlert() {
-                    if (!audioContext) return;
-                    const osc = audioContext.createOscillator();
-                    const gainNode = audioContext.createGain(); // 볼륨 조절 노드
-                    
-                    osc.type = 'sine'; // 부드러운 삑 소리
-                    osc.frequency.setValueAtTime(800, audioContext.currentTime); // 주파수 (음 높이)
-                    gainNode.gain.setValueAtTime(0.5, audioContext.currentTime); // 볼륨 (0~1)
-                    gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.5);
+        # 4. 파일 경로 설정 및 파일 존재 여부 확인
+        file_path = os.path.join('app', 'static', filename)
+        
+        if not os.path.exists(file_path):
+            st.error(f"오류: 경고음 파일을 찾을 수 없습니다. ({file_path})")
+            st.session_state.play_sound_trigger = None
+            return
 
-                    osc.connect(gainNode);
-                    gainNode.connect(audioContext.destination);
-                    
-                    osc.start();
-                    osc.stop(audioContext.currentTime + 0.5); // 0.5초간 재생
-                }
-            </script>
-        """)
-
-        # 2. 파이썬에서 상태를 확인하고, 위에서 만든 JavaScript 함수를 호출
-        if trigger := st.session_state.play_sound_trigger:
-            js_function_call = ""
-            if trigger == 'fire':
-                js_function_call = "playFireAlert();"
-            elif trigger == 'safety':
-                js_function_call = "playSafetyAlert();"
+        # 5. 파일을 읽고 Base64로 인코딩하여 재생
+        try:
+            with open(file_path, "rb") as f:
+                audio_bytes = f.read()
+            audio_base64 = base64.b64encode(audio_bytes).decode()
             
-            if js_function_call:
-                st.html(f"<script>{js_function_call}</script>")
-            
-            # 트리거 초기화
+            st.html(f"""
+                <audio autoplay style="display:none;">
+                    <source src="data:audio/wav;base64,{audio_base64}" type="audio/wav">
+                </audio>
+            """)
+        except Exception as e:
+            st.error(f"음성 파일 재생 중 오류: {e}")
+        
+        finally:
+            # 6. 재생 후 트리거 초기화
             st.session_state.play_sound_trigger = None
 
     def run(self):
