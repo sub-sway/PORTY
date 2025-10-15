@@ -44,7 +44,7 @@ try:
     CRACK_DB_NAME = "crack_monitor"
     CRACK_COLLECTION_NAME = "crack_results"
 
-    # ⭐️ 안전 조끼 감지 대시보드용 설정 추가
+    # 안전 조끼 감지 대시보드용 설정 추가
     HIVIS_DB_NAME = "HIvisDB"
     HIVIS_COLLECTION_NAME = "HivisData"
 
@@ -88,7 +88,7 @@ def get_mongo_collections():
         # 2. 도로 균열 감지 컬렉션
         collections["crack"] = client[CRACK_DB_NAME][CRACK_COLLECTION_NAME]
 
-        # 3. ⭐️ 안전 조끼 감지 컬렉션 추가
+        # 3. 안전 조끼 감지 컬렉션 추가
         collections["hivis"] = client[HIVIS_DB_NAME][HIVIS_COLLECTION_NAME]
 
         return collections
@@ -300,12 +300,13 @@ class UnifiedDashboard:
             'sensor_dashboard': '📈 실시간 센서',
             'sensor_log': '📜 센서 로그',
             'crack_monitor': '🛣️ 도로 균열 감지',
-            'hivis_monitor': '🦺 안전 조끼 감지' # ⭐️ 버튼 추가
+            'hivis_monitor': '🦺 안전 조끼 감지'
         }
         cols = st.columns(len(pages))
         for i, (page_key, page_title) in enumerate(pages.items()):
             with cols[i]:
-                if st.button(page_title, use_container_width=True, type="primary" if st.session_state.page == page_key else "secondary"):
+                # ⭐️ 수정된 부분
+                if st.button(page_title, width='stretch', type="primary" if st.session_state.page == page_key else "secondary"):
                     st.session_state.page = page_key
                     st.rerun()
         st.divider()
@@ -322,7 +323,6 @@ class UnifiedDashboard:
                     st.rerun()
                 st.divider()
 
-            # ⭐️ 안전 조끼 페이지용 사이드바 추가
             elif st.session_state.page == 'hivis_monitor':
                 st.subheader("안전 조끼 필터")
                 st.session_state.hivis_limit = st.slider("표시할 최근 항목 수", 1, 100, st.session_state.get('hivis_limit', 10))
@@ -377,7 +377,8 @@ class UnifiedDashboard:
             df = pd.DataFrame(st.session_state.latest_alerts)
             df['timestamp'] = pd.to_datetime(df['timestamp']).dt.tz_localize('UTC').dt.tz_convert('Asia/Seoul')
             display_df = df.rename(columns={"timestamp": "발생 시각", "type": "유형", "message": "메시지"})
-            st.dataframe(display_df[['발생 시각', '유형', '메시지']].sort_values(by="발생 시각", ascending=False), use_container_width=True, hide_index=True)
+            # ⭐️ 수정된 부분
+            st.dataframe(display_df[['발생 시각', '유형', '메시지']].sort_values(by="발생 시각", ascending=False), width='stretch', hide_index=True)
 
     def _render_sensor_dashboard(self):
         """실시간 센서 모니터링 페이지를 렌더링합니다."""
@@ -460,7 +461,8 @@ class UnifiedDashboard:
                             with graph_cols[j]:
                                 fig = px.line(df, x="timestamp", y=sensor, title=f"{sensor} 변화 추세")
                                 fig.update_layout(margin=dict(l=20, r=20, t=40, b=20), xaxis_title="시간", yaxis_title="값")
-                                st.plotly_chart(fig, use_container_width=True)
+                                # ⭐️ 수정된 부분
+                                st.plotly_chart(fig, width='stretch')
 
     def _render_sensor_log_page(self):
         """센서 이벤트 로그 페이지를 렌더링합니다."""
@@ -485,15 +487,17 @@ class UnifiedDashboard:
                             except ValueError:
                                 log_entries.append({"감지 시간 (KST)": parts[0], "메시지": parts[1].strip()})
                     log_df = pd.DataFrame(log_entries)
-                    st.dataframe(log_df, use_container_width=True, hide_index=True)
+                    # ⭐️ 수정된 부분
+                    st.dataframe(log_df, width='stretch', hide_index=True)
 
                     csv_data = log_df.to_csv(index=False).encode('utf-8-sig')
+                    # ⭐️ 수정된 부분
                     st.download_button(
                         label="📥 로그 CSV 다운로드",
                         data=csv_data,
                         file_name=f"sensor_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
                         mime="text/csv",
-                        use_container_width=True
+                        width='stretch'
                     )
 
                     st.divider()
@@ -526,7 +530,8 @@ class UnifiedDashboard:
                         with col1:
                             if 'annotated_image_base64' in doc:
                                 img_bytes = base64.b64decode(doc['annotated_image_base64'])
-                                st.image(img_bytes, caption="감지 결과 이미지", use_column_width=True)
+                                # ⭐️ 수정된 부분 (use_column_width -> width)
+                                st.image(img_bytes, caption="감지 결과 이미지", width='stretch')
                         with col2:
                             st.subheader("상세 감지 정보")
                             detections = doc.get('detections', [])
@@ -542,7 +547,6 @@ class UnifiedDashboard:
         else:
             st.warning("데이터베이스에 연결할 수 없어 도로 균열 데이터를 표시할 수 없습니다.")
 
-    # ⭐️ 안전 조끼 감지 페이지 렌더링 함수 추가
     def _render_hivis_monitor_page(self):
         """안전 조끼 감지 대시보드 페이지를 렌더링합니다."""
         limit = st.session_state.get('hivis_limit', 10)
@@ -560,7 +564,8 @@ class UnifiedDashboard:
                         col1, col2 = st.columns([2, 1])
                         with col1:
                             img_bytes = base64.b64decode(doc['annotated_image_base64'])
-                            st.image(img_bytes, caption="감지 결과 이미지", use_column_width=True)
+                            # ⭐️ 수정된 부분
+                            st.image(img_bytes, caption="감지 결과 이미지", width='stretch')
                         with col2:
                             st.subheader("상세 감지 정보")
                             detections = doc.get('detections', [])
@@ -606,7 +611,7 @@ class UnifiedDashboard:
             'sensor_dashboard': self._render_sensor_dashboard,
             'sensor_log': self._render_sensor_log_page,
             'crack_monitor': self._render_crack_monitor_page,
-            'hivis_monitor': self._render_hivis_monitor_page # ⭐️ 페이지와 함수 연결
+            'hivis_monitor': self._render_hivis_monitor_page
         }
         render_function = page_map.get(st.session_state.page, self._render_main_page)
         render_function()
