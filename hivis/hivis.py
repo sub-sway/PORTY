@@ -31,7 +31,7 @@ if client is None:
     st.warning("데이터베이스에 연결할 수 없습니다.")
 else:
     # ⭐️ DB 및 컬렉션 이름 변경
-    db = client["HivisDB"]
+    db = client["HIvisDB"]
     collection = db["HivisData"]
 
     st.sidebar.header("🔍 필터 옵션")
