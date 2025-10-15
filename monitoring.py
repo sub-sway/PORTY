@@ -207,9 +207,12 @@ class UnifiedDashboard:
                 st.session_state.current_status = msg
                 continue
 
+            # 👇 수정 제안
             try:
-                msg['timestamp'] = datetime.strptime(msg['timestamp'], "%Y-%m-%d %H:%M:%S")
+                # ISO 8601 형식을 직접 datetime 객체로 변환
+                msg['timestamp'] = datetime.fromisoformat(msg['timestamp'].replace('Z', '+00:00'))
             except (ValueError, TypeError):
+                # 만약 위 형식도 아니라면 현재 시간으로 대체
                 msg['timestamp'] = datetime.now()
 
             st.session_state.latest_alerts.insert(0, msg)
