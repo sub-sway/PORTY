@@ -43,7 +43,7 @@ try:
     SENSORS_COLLECTION_NAME = "SensorData"
 
     # 도로 균열 감지 대시보드용 설정
-    CRACK_MONGO_URI = st.secrets["MONGO_URI"]
+    CRACK_MONGO_URI = st.secrets["CRACK_MONGO_URI"]
     CRACK_DB_NAME = "crack_monitor"
     CRACK_COLLECTION_NAME = "crack_results"
 
@@ -214,7 +214,7 @@ class UnifiedDashboard:
             st.session_state.latest_alerts.insert(0, msg)
             if len(st.session_state.latest_alerts) > 100:
                 st.session_state.latest_alerts.pop()
-            if self.collections:
+            if self.collections and 'alerts' in self.collections:
                 self.collections['alerts'].insert_one(msg.copy())
 
         # 2. 센서 데이터 큐 처리
@@ -233,7 +233,7 @@ class UnifiedDashboard:
                 data_dict['timestamp'] = datetime.now(timezone.utc)
                 self._check_and_trigger_sensor_alerts(data_dict)
                 new_data.append(data_dict)
-                if self.collections:
+                if self.collections and 'sensors' in self.collections:
                     self.collections['sensors'].insert_one(data_dict.copy())
             except (ValueError, IndexError) as e:
                 logging.warning(f"센서 데이터 파싱 오류: {e} - 페이로드: {payload}")
@@ -254,12 +254,42 @@ class UnifiedDashboard:
             except Exception as e:
                 logging.error(f"로그 파일 작성 오류: {e}")
 
-        if data_dict.get("Flame") == 0:
-            log_alert("🔥 긴급: 불꽃 감지됨!")
-            st.toast("🔥 긴급: 불꽃 감지됨!", icon="🔥")
+        def trigger_ui_alert(message, icon, sound_type):
+            st.toast(message, icon=icon)
             if st.session_state.sound_enabled:
-                st.session_state.play_sound_trigger = 'fire'
-        # ... (기타 센서 알림 로직)
+                st.session_state.play_sound_trigger = sound_type
+
+        if data_dict.get("Flame") == 0:
+            msg = "🔥 긴급: 불꽃 감지됨! 즉시 확인이 필요합니다!"
+            log_alert(msg)
+            trigger_ui_alert(msg, "🔥", "fire")
+
+        oxygen_val = data_dict.get("Oxygen")
+        if oxygen_val is not None and not (OXYGEN_SAFE_MIN <= oxygen_val <= OXYGEN_SAFE_MAX):
+            msg = f"🟠 산소 농도 경고! 현재 값: {oxygen_val:.1f}%"
+            log_alert(msg)
+        
+        no2_val = data_dict.get("NO2")
+        if no2_val is not None:
+            if no2_val >= NO2_DANGER_LIMIT:
+                msg = f"🔴 이산화질소(NO2) 위험! 현재 값: {no2_val:.3f} ppm"
+                log_alert(msg)
+            elif no2_val >= NO2_WARN_LIMIT:
+                msg = f"🟡 이산화질소(NO2) 주의! 현재 값: {no2_val:.3f} ppm"
+                log_alert(msg)
+
+        newly_detected_gases = []
+        gas_sensors = ["CH4", "EtOH", "H2", "NH3", "CO"]
+        for sensor in gas_sensors:
+            new_value = data_dict.get(sensor, 0.0)
+            if new_value > 0 and st.session_state.last_sensor_values.get(sensor, 0.0) == 0:
+                newly_detected_gases.append(f"{sensor}: {new_value:.3f}")
+            st.session_state.last_sensor_values[sensor] = new_value
+
+        if newly_detected_gases:
+            detected_gases_str = ", ".join(newly_detected_gases)
+            msg = f"🟡 가스 감지됨! [{detected_gases_str}]"
+            log_alert(msg)
         
     def _render_header_and_nav(self):
         """페이지 상단의 제목과 네비게이션 버튼을 렌더링합니다."""
@@ -336,12 +366,131 @@ class UnifiedDashboard:
     def _render_sensor_dashboard(self):
         """실시간 센서 모니터링 페이지를 렌더링합니다."""
         st.header("실시간 센서 모니터링")
-        # ... (이전 코드와 로직 동일)
+        df = st.session_state.live_df
+        if df.empty and self.collections:
+            try:
+                records = list(self.collections['sensors'].find().sort("timestamp", -1).limit(1000))
+                if records:
+                    temp_df = pd.DataFrame(reversed(records))
+                    temp_df['timestamp'] = pd.to_datetime(temp_df['timestamp'])
+                    if temp_df['timestamp'].dt.tz is None:
+                        temp_df['timestamp'] = temp_df['timestamp'].dt.tz_localize('UTC')
+                    else:
+                        temp_df['timestamp'] = temp_df['timestamp'].dt.tz_convert('UTC')
+                    st.session_state.live_df = temp_df
+                    df = st.session_state.live_df
+            except Exception as e:
+                st.error(f"초기 센서 데이터 로드 실패: {e}")
+
+        st.subheader("📡 실시간 수신 상태")
+        status_cols = st.columns(3)
+        now_kst = datetime.now(timezone.utc) + timedelta(hours=9)
+        status_cols[0].metric("현재 시간 (KST)", now_kst.strftime("%H:%M:%S"))
+
+        if not df.empty and 'timestamp' in df.columns:
+            last_reception_utc = pd.to_datetime(df['timestamp'].iloc[-1])
+            time_diff = datetime.now(timezone.utc) - last_reception_utc
+            status_cols[1].metric("마지막 수신 (KST)", (last_reception_utc + timedelta(hours=9)).strftime("%H:%M:%S"))
+            if time_diff.total_seconds() < 10:
+                status_cols[2].success("🟢 실시간 수신 중")
+            else:
+                status_cols[2].warning(f"🟠 {int(time_diff.total_seconds())}초 수신 없음")
+        else:
+            status_cols[1].metric("마지막 수신", "N/A")
+            status_cols[2].info("수신 대기 중...")
+        
+        st.subheader("🚨 종합 현재 상태")
+        if not df.empty:
+            latest_data = df.iloc[-1]
+            flame_detected = latest_data.get("Flame") == 0
+            oxygen_unsafe = not (OXYGEN_SAFE_MIN <= latest_data.get("Oxygen", 20.9) <= OXYGEN_SAFE_MAX)
+            no2_dangerous = latest_data.get("NO2", 0) >= NO2_DANGER_LIMIT
+            no2_warning = latest_data.get("NO2", 0) >= NO2_WARN_LIMIT
+            
+            conditions = [flame_detected, oxygen_unsafe, no2_dangerous, no2_warning]
+            
+            if flame_detected: st.error("🔥 불꽃 감지됨!", icon="🔥")
+            if oxygen_unsafe: st.warning(f"🟠 산소 농도 경고! 현재 {latest_data.get('Oxygen', 0):.1f}%", icon="⚠️")
+            if no2_dangerous: st.error(f"🔴 이산화질소(NO2) 농도 위험! 현재 {latest_data.get('NO2', 0):.3f} ppm", icon="☣️")
+            elif no2_warning: st.warning(f"🟡 이산화질소(NO2) 농도 주의! 현재 {latest_data.get('NO2', 0):.3f} ppm", icon="⚠️")
+            
+            if not any(conditions):
+                st.success("✅ 안정 범위 내에 있습니다.", icon="👍")
+        else:
+            st.info("데이터 수신 대기 중...")
+
+        if not df.empty:
+            st.subheader("📊 현재 센서 값")
+            latest_data = df.iloc[-1]
+            sensors = ["CH4", "EtOH", "H2", "NH3", "CO", "NO2", "Oxygen", "Distance", "Flame"]
+            metric_cols = st.columns(5)
+            for i, sensor in enumerate(sensors):
+                with metric_cols[i % 5]:
+                    if sensor in latest_data:
+                        if sensor == "Flame":
+                            state = "🔥 감지됨" if latest_data[sensor] == 0 else "🟢 정상"
+                            st.metric(label="불꽃 상태", value=state)
+                        else:
+                            st.metric(label=f"{sensor}", value=f"{latest_data[sensor]:.3f}")
+            
+            st.divider()
+            st.subheader("📈 센서별 실시간 변화 추세")
+            if 'timestamp' in df.columns:
+                sensors_for_graph = ["CH4", "EtOH", "H2", "NH3", "CO", "NO2", "Oxygen", "Distance"]
+                for i in range(0, len(sensors_for_graph), 2):
+                    graph_cols = st.columns(2)
+                    for j, sensor in enumerate(sensors_for_graph[i:i+2]):
+                        if sensor in df.columns:
+                            with graph_cols[j]:
+                                fig = px.line(df, x="timestamp", y=sensor, title=f"{sensor} 변화 추세")
+                                fig.update_layout(margin=dict(l=20, r=20, t=40, b=20), xaxis_title="시간", yaxis_title="값")
+                                st.plotly_chart(fig, use_container_width=True)
         
     def _render_sensor_log_page(self):
         """센서 이벤트 로그 페이지를 렌더링합니다."""
         st.header("센서 이벤트 로그")
-        # ... (이전 코드와 로직 동일)
+        st.write("불꽃, 위험 가스 농도 등 주요 이벤트가 감지될 때의 기록입니다.")
+        if os.path.exists(LOG_FILE):
+            try:
+                with open(LOG_FILE, "r", encoding="utf-8") as f:
+                    log_lines = f.readlines()
+                if log_lines:
+                    log_entries = []
+                    for line in reversed(log_lines):
+                        if " - " in line:
+                            parts = line.split(" - ", 1)
+                            try:
+                                utc_dt = datetime.fromisoformat(parts[0])
+                                kst_dt = utc_dt.astimezone(timezone(timedelta(hours=9)))
+                                log_entries.append({
+                                    "감지 시간 (KST)": kst_dt.strftime('%Y-%m-%d %H:%M:%S'),
+                                    "메시지": parts[1].strip()
+                                })
+                            except ValueError:
+                                log_entries.append({"감지 시간 (KST)": parts[0], "메시지": parts[1].strip()})
+                    log_df = pd.DataFrame(log_entries)
+                    st.dataframe(log_df, use_container_width=True, hide_index=True)
+
+                    csv_data = log_df.to_csv(index=False).encode('utf-8-sig')
+                    st.download_button(
+                        label="📥 로그 CSV 다운로드",
+                        data=csv_data,
+                        file_name=f"sensor_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                        mime="text/csv",
+                        use_container_width=True
+                    )
+                    
+                    st.divider()
+                    if st.button("🚨 로그 전체 삭제", type="primary"):
+                        os.remove(LOG_FILE)
+                        st.success("✅ 모든 로그 기록이 삭제되었습니다.")
+                        st.rerun()
+                else:
+                    st.info("👀 로그 파일이 비어있습니다.")
+            except Exception as e:
+                st.error(f"로그 파일을 읽는 중 오류가 발생했습니다: {e}")
+        else:
+            st.info("👍 아직 감지된 이벤트가 없어 로그 파일이 생성되지 않았습니다.")
 
     def _render_crack_monitor_page(self):
         """도로 균열 감지 대시보드 페이지를 렌더링합니다."""
@@ -380,11 +529,13 @@ class UnifiedDashboard:
     def _handle_audio_playback(self):
         """경고음 재생을 처리합니다."""
         st.html("""
-            <audio id="fire-alert-sound" preload="auto"></audio>
-            <audio id="safety-alert-sound" preload="auto"></audio>
+            <audio id="fire-alert-sound" preload="auto">
+                <source src="app/static/fire_cut_mp3.mp3" type="audio/mpeg">
+            </audio>
+            <audio id="safety-alert-sound" preload="auto">
+                <source src="app/static/Stranger_cut_mp3.mp3" type="audio/mpeg">
+            </audio>
         """)
-        # 경고음 파일 경로는 실제 환경에 맞게 설정 필요
-        # 예: <source src="https://.../fire_alert.mp3" type="audio/mpeg">
         
         if trigger := st.session_state.play_sound_trigger:
             sound_id = 'fire-alert-sound' if trigger == 'fire' else 'safety-alert-sound'
