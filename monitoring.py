@@ -462,7 +462,8 @@ class UnifiedDashboard:
                                 fig = px.line(df, x="timestamp", y=sensor, title=f"{sensor} 변화 추세")
                                 fig.update_layout(margin=dict(l=20, r=20, t=40, b=20), xaxis_title="시간", yaxis_title="값")
                                 # ⭐️ 수정된 부분
-                                st.plotly_chart(fig, width='stretch')
+                                config = {'responsive': True, 'displayModeBar': False}
+                                st.plotly_chart(fig, width='stretch', config=config)
 
     def _render_sensor_log_page(self):
         """센서 이벤트 로그 페이지를 렌더링합니다."""
