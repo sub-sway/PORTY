@@ -608,19 +608,64 @@ class UnifiedDashboard:
             st.warning("데이터베이스에 연결할 수 없어 안전 조끼 데이터를 표시할 수 없습니다.")
 
     def _handle_audio_playback(self):
-        """경고음 재생을 처리합니다."""
+        """경고음 재생을 처리합니다. (Web Audio API 사용, 파일 필요 없음)"""
+        
+        # 1. 브라우저에 소리를 생성하는 JavaScript 코드 주입
         st.html("""
-            <audio id="fire-alert-sound" preload="auto">
-                <source src="app/static/fire_cut_mp3.mp3" type="audio/mpeg">
-            </audio>
-            <audio id="safety-alert-sound" preload="auto">
-                <source src="app/static/Stranger_cut_mp3.mp3" type="audio/mpeg">
-            </audio>
+            <script>
+                // 오디오 작업을 위한 전역 컨텍스트 생성 (최초 1회만 실행됨)
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+                // 삐-뽀- 삐-뽀- 하는 화재 경보음 생성 함수
+                function playFireAlert() {
+                    if (!audioContext) return;
+                    let highTone = 900;
+                    let lowTone = 500;
+                    let duration = 0.15; // 각 톤의 지속 시간 (초)
+                    let startTime = audioContext.currentTime;
+
+                    for (let i = 0; i < 4; i++) { // 4번 반복 (삐-뽀- 삐-뽀-)
+                        const osc = audioContext.createOscillator();
+                        osc.type = 'sawtooth'; // 사이렌과 비슷한 거친 톤
+                        osc.frequency.setValueAtTime(i % 2 === 0 ? highTone : lowTone, startTime + i * duration);
+                        osc.connect(audioContext.destination);
+                        osc.start(startTime + i * duration);
+                        osc.stop(startTime + (i + 1) * duration);
+                    }
+                }
+
+                // 삑! 하는 단일 주의음 생성 함수
+                function playSafetyAlert() {
+                    if (!audioContext) return;
+                    const osc = audioContext.createOscillator();
+                    const gainNode = audioContext.createGain(); // 볼륨 조절 노드
+                    
+                    osc.type = 'sine'; // 부드러운 삑 소리
+                    osc.frequency.setValueAtTime(800, audioContext.currentTime); // 주파수 (음 높이)
+                    gainNode.gain.setValueAtTime(0.5, audioContext.currentTime); // 볼륨 (0~1)
+                    gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.5);
+
+                    osc.connect(gainNode);
+                    gainNode.connect(audioContext.destination);
+                    
+                    osc.start();
+                    osc.stop(audioContext.currentTime + 0.5); // 0.5초간 재생
+                }
+            </script>
         """)
 
+        # 2. 파이썬에서 상태를 확인하고, 위에서 만든 JavaScript 함수를 호출
         if trigger := st.session_state.play_sound_trigger:
-            sound_id = 'fire-alert-sound' if trigger == 'fire' else 'safety-alert-sound'
-            st.html(f"<script>document.getElementById('{sound_id}').play();</script>")
+            js_function_call = ""
+            if trigger == 'fire':
+                js_function_call = "playFireAlert();"
+            elif trigger == 'safety':
+                js_function_call = "playSafetyAlert();"
+            
+            if js_function_call:
+                st.html(f"<script>{js_function_call}</script>")
+            
+            # 트리거 초기화
             st.session_state.play_sound_trigger = None
 
     def run(self):
