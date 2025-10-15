@@ -329,7 +329,10 @@ class UnifiedDashboard:
             else:
                 st.session_state.sound_enabled = st.toggle("알림음 활성화/비활성화", value=st.session_state.sound_enabled)
             
-            st.success("알림음 활성화 상태") if st.session_state.sound_enabled else st.warning("알림음 비활성화 상태")
+            if st.session_state.sound_enabled:
+                st.success("알림음 활성화 상태")
+            else:
+                st.warning("알림음 비활성화 상태")
 
     def _render_main_page(self):
         """메인 대시보드 페이지(안전 모니터링)를 렌더링합니다."""
@@ -351,7 +354,10 @@ class UnifiedDashboard:
         with col2:
             st.subheader("MQTT 연결 상태")
             client = self.clients.get('alerts')
-            st.success("🟢 실시간 수신 중") if client and client.is_connected() else st.error("🔴 연결 끊김")
+            if client and client.is_connected():
+                st.success("🟢 실시간 수신 중")
+            else:
+                st.error("🔴 연결 끊김")
 
         st.divider()
         st.subheader("🚨 최근 경보 내역")
