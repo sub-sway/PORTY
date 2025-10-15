@@ -43,7 +43,7 @@ try:
     SENSORS_COLLECTION_NAME = "SensorData"
 
     # 도로 균열 감지 대시보드용 설정
-    CRACK_MONGO_URI = st.secrets["CRACK_MONGO_URI"]
+    CRACK_MONGO_URI = st.secrets["MONGO_URI"]
     CRACK_DB_NAME = "crack_monitor"
     CRACK_COLLECTION_NAME = "crack_results"
 
