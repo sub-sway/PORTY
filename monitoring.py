@@ -15,7 +15,6 @@ import os
 import base64
 
 # --- 로거 설정 ---
-# 로그 메시지를 표준 출력으로 보내어 터미널이나 로그 파일에서 확인할 수 있도록 설정합니다.
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -24,11 +23,10 @@ logging.basicConfig(
 )
 
 # --- 설정 (st.secrets 에서 가져옴) ---
-# .streamlit/secrets.toml 파일에서 보안 정보를 안전하게 불러옵니다.
 try:
     # 안전 모니터링 대시보드용 설정
     HIVE_BROKER = st.secrets["HIVE_BROKER"]
-    MONGO_URI = st.secrets["MONGO_URI"]
+    MONGO_URI = st.secrets["MONGO_URI"] # 공통 URI
     HIVE_USERNAME_ALERTS = st.secrets["HIVE_USERNAME_ALERTS"]
     HIVE_PASSWORD_ALERTS = st.secrets["HIVE_PASSWORD_ALERTS"]
     ALERTS_PORT = 8884
@@ -43,9 +41,12 @@ try:
     SENSORS_COLLECTION_NAME = "SensorData"
 
     # 도로 균열 감지 대시보드용 설정
-    CRACK_MONGO_URI = st.secrets["MONGO_URI"]
     CRACK_DB_NAME = "crack_monitor"
     CRACK_COLLECTION_NAME = "crack_results"
+
+    # ⭐️ 안전 조끼 감지 대시보드용 설정 추가
+    HIVIS_DB_NAME = "HIvisDB"
+    HIVIS_COLLECTION_NAME = "HivisData"
 
     # 공통 센서 경고 기준 설정
     LOG_FILE = "sensor_logs.txt"
@@ -72,23 +73,23 @@ def get_sensors_queue():
 
 @st.cache_resource
 def get_mongo_collections():
-    """두 개의 MongoDB 데이터베이스에 연결하고 컬렉션 객체들을 반환합니다."""
+    """모든 MongoDB 데이터베이스에 연결하고 컬렉션 객체들을 반환합니다."""
     collections = {}
     try:
-        # 1. 안전 모니터링 DB 연결
-        logging.info("안전 모니터링 MongoDB에 연결을 시도합니다...")
-        safety_client = pymongo.MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
-        safety_client.admin.command('ping')
-        logging.info("✅ 안전 모니터링 MongoDB 연결 성공.")
-        collections["alerts"] = safety_client[ALERTS_DB_NAME][ALERTS_COLLECTION_NAME]
-        collections["sensors"] = safety_client[SENSORS_DB_NAME][SENSORS_COLLECTION_NAME]
+        logging.info("MongoDB에 연결을 시도합니다...")
+        client = pymongo.MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
+        client.admin.command('ping')
+        logging.info("✅ MongoDB 연결 성공.")
 
-        # 2. 도로 균열 감지 DB 연결
-        logging.info("도로 균열 감지 MongoDB에 연결을 시도합니다...")
-        crack_client = pymongo.MongoClient(CRACK_MONGO_URI, serverSelectionTimeoutMS=5000)
-        crack_client.admin.command('ping')
-        logging.info("✅ 도로 균열 감지 MongoDB 연결 성공.")
-        collections["crack"] = crack_client[CRACK_DB_NAME][CRACK_COLLECTION_NAME]
+        # 1. 안전 모니터링 컬렉션
+        collections["alerts"] = client[ALERTS_DB_NAME][ALERTS_COLLECTION_NAME]
+        collections["sensors"] = client[SENSORS_DB_NAME][SENSORS_COLLECTION_NAME]
+
+        # 2. 도로 균열 감지 컬렉션
+        collections["crack"] = client[CRACK_DB_NAME][CRACK_COLLECTION_NAME]
+
+        # 3. ⭐️ 안전 조끼 감지 컬렉션 추가
+        collections["hivis"] = client[HIVIS_DB_NAME][HIVIS_COLLECTION_NAME]
 
         return collections
     except Exception as e:
@@ -268,7 +269,7 @@ class UnifiedDashboard:
         if oxygen_val is not None and not (OXYGEN_SAFE_MIN <= oxygen_val <= OXYGEN_SAFE_MAX):
             msg = f"🟠 산소 농도 경고! 현재 값: {oxygen_val:.1f}%"
             log_alert(msg)
-        
+
         no2_val = data_dict.get("NO2")
         if no2_val is not None:
             if no2_val >= NO2_DANGER_LIMIT:
@@ -290,15 +291,16 @@ class UnifiedDashboard:
             detected_gases_str = ", ".join(newly_detected_gases)
             msg = f"🟡 가스 감지됨! [{detected_gases_str}]"
             log_alert(msg)
-        
+
     def _render_header_and_nav(self):
         """페이지 상단의 제목과 네비게이션 버튼을 렌더링합니다."""
         st.title("🛡️ 통합 모니터링 대시보드")
         pages = {
             'main': '🏠 안전 모니터링',
-            'sensor_dashboard': '📈 실시간 센서', 
+            'sensor_dashboard': '📈 실시간 센서',
             'sensor_log': '📜 센서 로그',
-            'crack_monitor': '🛣️ 도로 균열 감지'
+            'crack_monitor': '🛣️ 도로 균열 감지',
+            'hivis_monitor': '🦺 안전 조끼 감지' # ⭐️ 버튼 추가
         }
         cols = st.columns(len(pages))
         for i, (page_key, page_title) in enumerate(pages.items()):
@@ -320,6 +322,14 @@ class UnifiedDashboard:
                     st.rerun()
                 st.divider()
 
+            # ⭐️ 안전 조끼 페이지용 사이드바 추가
+            elif st.session_state.page == 'hivis_monitor':
+                st.subheader("안전 조끼 필터")
+                st.session_state.hivis_limit = st.slider("표시할 최근 항목 수", 1, 100, st.session_state.get('hivis_limit', 10))
+                if st.button("새로고침 🔄"):
+                    st.rerun()
+                st.divider()
+
             st.subheader("알림음 설정")
             if not st.session_state.sound_primed:
                 if st.button("🔔 알림음 활성화 (최초 1회 클릭)"):
@@ -328,7 +338,7 @@ class UnifiedDashboard:
                     st.rerun()
             else:
                 st.session_state.sound_enabled = st.toggle("알림음 활성화/비활성화", value=st.session_state.sound_enabled)
-            
+
             if st.session_state.sound_enabled:
                 st.success("알림음 활성화 상태")
             else:
@@ -344,7 +354,7 @@ class UnifiedDashboard:
                 st.session_state.latest_alerts = alerts
             except Exception as e:
                 st.error(f"초기 경보 데이터 로드 실패: {e}")
-        
+
         col1, col2 = st.columns([3, 1])
         with col1:
             st.subheader("📡 시스템 현재 상태")
@@ -404,7 +414,7 @@ class UnifiedDashboard:
         else:
             status_cols[1].metric("마지막 수신", "N/A")
             status_cols[2].info("수신 대기 중...")
-        
+
         st.subheader("🚨 종합 현재 상태")
         if not df.empty:
             latest_data = df.iloc[-1]
@@ -412,14 +422,14 @@ class UnifiedDashboard:
             oxygen_unsafe = not (OXYGEN_SAFE_MIN <= latest_data.get("Oxygen", 20.9) <= OXYGEN_SAFE_MAX)
             no2_dangerous = latest_data.get("NO2", 0) >= NO2_DANGER_LIMIT
             no2_warning = latest_data.get("NO2", 0) >= NO2_WARN_LIMIT
-            
+
             conditions = [flame_detected, oxygen_unsafe, no2_dangerous, no2_warning]
-            
+
             if flame_detected: st.error("🔥 불꽃 감지됨!", icon="🔥")
             if oxygen_unsafe: st.warning(f"🟠 산소 농도 경고! 현재 {latest_data.get('Oxygen', 0):.1f}%", icon="⚠️")
             if no2_dangerous: st.error(f"🔴 이산화질소(NO2) 농도 위험! 현재 {latest_data.get('NO2', 0):.3f} ppm", icon="☣️")
             elif no2_warning: st.warning(f"🟡 이산화질소(NO2) 농도 주의! 현재 {latest_data.get('NO2', 0):.3f} ppm", icon="⚠️")
-            
+
             if not any(conditions):
                 st.success("✅ 안정 범위 내에 있습니다.", icon="👍")
         else:
@@ -438,7 +448,7 @@ class UnifiedDashboard:
                             st.metric(label="불꽃 상태", value=state)
                         else:
                             st.metric(label=f"{sensor}", value=f"{latest_data[sensor]:.3f}")
-            
+
             st.divider()
             st.subheader("📈 센서별 실시간 변화 추세")
             if 'timestamp' in df.columns:
@@ -451,7 +461,7 @@ class UnifiedDashboard:
                                 fig = px.line(df, x="timestamp", y=sensor, title=f"{sensor} 변화 추세")
                                 fig.update_layout(margin=dict(l=20, r=20, t=40, b=20), xaxis_title="시간", yaxis_title="값")
                                 st.plotly_chart(fig, use_container_width=True)
-        
+
     def _render_sensor_log_page(self):
         """센서 이벤트 로그 페이지를 렌더링합니다."""
         st.header("센서 이벤트 로그")
@@ -485,7 +495,7 @@ class UnifiedDashboard:
                         mime="text/csv",
                         use_container_width=True
                     )
-                    
+
                     st.divider()
                     if st.button("🚨 로그 전체 삭제", type="primary"):
                         os.remove(LOG_FILE)
@@ -500,11 +510,11 @@ class UnifiedDashboard:
 
     def _render_crack_monitor_page(self):
         """도로 균열 감지 대시보드 페이지를 렌더링합니다."""
-        st.header(f"최근 감지된 균열 목록 (상위 {st.session_state.get('crack_limit', 10)}개)")
+        limit = st.session_state.get('crack_limit', 10)
+        st.header(f"최근 감지된 균열 목록 (상위 {limit}개)")
 
         if self.collections and 'crack' in self.collections:
             collection = self.collections['crack']
-            limit = st.session_state.get('crack_limit', 10)
             try:
                 for doc in collection.find({}).sort("timestamp", -1).limit(limit):
                     timestamp_local = doc['timestamp'].strftime('%Y-%m-%d %H:%M:%S')
@@ -532,6 +542,43 @@ class UnifiedDashboard:
         else:
             st.warning("데이터베이스에 연결할 수 없어 도로 균열 데이터를 표시할 수 없습니다.")
 
+    # ⭐️ 안전 조끼 감지 페이지 렌더링 함수 추가
+    def _render_hivis_monitor_page(self):
+        """안전 조끼 감지 대시보드 페이지를 렌더링합니다."""
+        limit = st.session_state.get('hivis_limit', 10)
+        st.header(f"최근 감지된 안전 조끼 착용 현황 (상위 {limit}개)")
+
+        if self.collections and 'hivis' in self.collections:
+            collection = self.collections['hivis']
+            try:
+                for doc in collection.find({}).sort("timestamp", -1).limit(limit):
+                    timestamp_local = doc['timestamp'].strftime('%Y-%m-%d %H:%M:%S')
+                    device_name = doc.get('source_device', 'N/A')
+                    num_detections = len(doc.get('detections', []))
+
+                    with st.expander(f"**감지 시간:** {timestamp_local} | **감지 장치:** {device_name} | **감지된 객체 수:** {num_detections}"):
+                        col1, col2 = st.columns([2, 1])
+                        with col1:
+                            img_bytes = base64.b64decode(doc['annotated_image_base64'])
+                            st.image(img_bytes, caption="감지 결과 이미지", use_column_width=True)
+                        with col2:
+                            st.subheader("상세 감지 정보")
+                            detections = doc.get('detections', [])
+                            if not detections:
+                                st.info("감지된 객체가 없습니다.")
+                            else:
+                                for i, detection in enumerate(detections):
+                                    st.metric(
+                                        label=f"#{i+1}: {detection['class_name']}",
+                                        value=f"{detection['confidence']:.2%}"
+                                    )
+                                    st.code(f"Box: {[int(c) for c in detection['box_xyxy']]}", language="text")
+                            st.caption(f"DB ID: {doc['_id']}")
+            except Exception as e:
+                st.error(f"안전 조끼 데이터 로딩 중 오류 발생: {e}")
+        else:
+            st.warning("데이터베이스에 연결할 수 없어 안전 조끼 데이터를 표시할 수 없습니다.")
+
     def _handle_audio_playback(self):
         """경고음 재생을 처리합니다."""
         st.html("""
@@ -542,7 +589,7 @@ class UnifiedDashboard:
                 <source src="app/static/Stranger_cut_mp3.mp3" type="audio/mpeg">
             </audio>
         """)
-        
+
         if trigger := st.session_state.play_sound_trigger:
             sound_id = 'fire-alert-sound' if trigger == 'fire' else 'safety-alert-sound'
             st.html(f"<script>document.getElementById('{sound_id}').play();</script>")
@@ -558,11 +605,12 @@ class UnifiedDashboard:
             'main': self._render_main_page,
             'sensor_dashboard': self._render_sensor_dashboard,
             'sensor_log': self._render_sensor_log_page,
-            'crack_monitor': self._render_crack_monitor_page
+            'crack_monitor': self._render_crack_monitor_page,
+            'hivis_monitor': self._render_hivis_monitor_page # ⭐️ 페이지와 함수 연결
         }
         render_function = page_map.get(st.session_state.page, self._render_main_page)
         render_function()
-        
+
         self._handle_audio_playback()
         st_autorefresh(interval=2000, key="refresher")
         return
@@ -571,4 +619,3 @@ if __name__ == "__main__":
     if 'app' not in st.session_state:
         st.session_state.app = UnifiedDashboard()
     st.session_state.app.run()
-
