@@ -154,13 +154,16 @@ def start_mqtt_clients():
             logging.error(f"SENSOR MESSAGE 처리 실패. Error: {e}. Payload: {msg.payload.decode()}", exc_info=True)
 
     try:
-        sensors_client = mqtt.Client(
-            client_id=f"st-sensors-{random.randint(0, 1000)}",
-            callback_api_version=mqtt.CallbackAPIVersion.VERSION2
-        )
-        sensors_client.username_pw_set(HIVE_USERNAME_SENSORS, HIVE_PASSWORD_SENSORS)
-        sensors_client.tls_set(cert_reqs=ssl.CERT_NONE) # <-- 이렇게 수정하세요.
-        sensors_client.on_connect = on_connect_sensors
+        sensors_client = mqtt.Client(
+            client_id=f"st-sensors-{random.randint(0, 1000)}",
+            callback_api_version=mqtt.CallbackAPIVersion.VERSION2
+        )
+        sensors_client.username_pw_set(HIVE_USERNAME_SENSORS, HIVE_PASSWORD_SENSORS)
+        
+        # 이전 답변에서 수정된 부분: CERT_NONE 사용
+        sensors_client.tls_set(cert_reqs=ssl.CERT_NONE)
+        
+        sensors_client.on_connect = on_connect_sensors
         sensors_client.on_message = on_message_sensors
         sensors_client.connect(HIVE_BROKER, SENSORS_PORT, 60)
         sensors_client.loop_start()
