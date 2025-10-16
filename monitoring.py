@@ -364,43 +364,57 @@ class UnifiedDashboard:
                 st.warning("알림음 비활성화 상태")
 
     def _render_main_page(self):
-        """메인 대시보드 페이지(안전 모니터링)를 렌더링합니다."""
-        st.header("항만시설 현장 안전 모니터링")
-        if not st.session_state.latest_alerts and self.collections:
-            try:
-                query = {"type": {"$ne": "normal"}}
-                alerts = list(self.collections['alerts'].find(query).sort("timestamp", pymongo.DESCENDING).limit(5))
-                st.session_state.latest_alerts = alerts
-            except Exception as e:
-                st.error(f"초기 경보 데이터 로드 실패: {e}")
+    """메인 대시보드 페이지(안전 모니터링)를 렌더링합니다."""
+    st.header("항만시설 현장 안전 모니터링")
+    if not st.session_state.latest_alerts and self.collections:
+        try:
+            query = {"type": {"$ne": "normal"}}
+            alerts = list(self.collections['alerts'].find(query).sort("timestamp", pymongo.DESCENDING).limit(5))
+            st.session_state.latest_alerts = alerts
+        except Exception as e:
+            st.error(f"초기 경보 데이터 로드 실패: {e}")
 
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            st.subheader("📡 시스템 현재 상태")
-            status_message = st.session_state.current_status.get("message", "상태 정보 없음")
-            status_time = st.session_state.current_status.get("timestamp", "N/A")
-            st.info(f"{status_message} (마지막 신호: {status_time})")
-        with col2:
-            st.subheader("MQTT 연결 상태")
-            client = self.clients.get('alerts')
-            if client and client.is_connected():
-                st.success("🟢 실시간 수신 중")
-            else:
-                st.error("🔴 연결 끊김")
-
-        st.divider()
-        st.subheader("🚨 최근 경보 내역")
-        if not st.session_state.latest_alerts:
-            st.info("수신된 경보가 없습니다.")
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.subheader("📡 시스템 현재 상태")
+        status_message = st.session_state.current_status.get("message", "상태 정보 없음")
+        status_time = st.session_state.current_status.get("timestamp", "N/A")
+        st.info(f"{status_message} (마지막 신호: {status_time})")
+    with col2:
+        st.subheader("MQTT 연결 상태")
+        client = self.clients.get('alerts')
+        if client and client.is_connected():
+            st.success("🟢 실시간 수신 중")
         else:
-            df = pd.DataFrame(st.session_state.latest_alerts)
-            df['timestamp'] = pd.to_datetime(df['timestamp']).dt.tz_localize('UTC').dt.tz_convert('Asia/Seoul')
-            display_df = df.rename(columns={"timestamp": "발생 시각", "type": "유형", "message": "메시지"})
+            st.error("🔴 연결 끊김")
+
+    st.divider()
+    st.subheader("🚨 최근 경보 내역")
+    if not st.session_state.latest_alerts:
+        st.info("수신된 경보가 없습니다.")
+    else:
+        df = pd.DataFrame(st.session_state.latest_alerts)
+        df['timestamp'] = pd.to_datetime(df['timestamp']).dt.tz_localize('UTC').dt.tz_convert('Asia/Seoul')
+        
+        # [수정] 존재하는 열만 이름 변경
+        display_df = df.rename(columns={"timestamp": "발생 시각", "type": "유형", "message": "메시지"})
+        
+        # [수정] 표시하려는 열 목록 정의
+        desired_columns = ['발생 시각', '유형', '메시지']
+        
+        # [수정] 데이터프레임에 실제 존재하는 열만 필터링
+        columns_to_display = [col for col in desired_columns if col in display_df.columns]
+
+        # [수정] 필터링된 열만 사용하여 데이터프레임 표시
+        if columns_to_display:
             st.dataframe(
-                display_df[['발생 시각', '유형', '메시지']].sort_values(by="발생 시각", ascending=False),
-                width='stretch',  # [수정] use_container_width=True -> width='stretch'
+                display_df[columns_to_display].sort_values(by="발생 시각", ascending=False),
+                width='stretch',
                 hide_index=True
             )
+        else:
+            # 표시할 열이 하나도 없는 경우 (예: 데이터가 비정상적일 때)
+            st.warning("경보 데이터는 있으나 표시할 내용이 없습니다.")
 
     def _render_sensor_dashboard(self):
         """실시간 센서 모니터링 페이지를 렌더링합니다."""
