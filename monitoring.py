@@ -403,13 +403,38 @@ class UnifiedDashboard:
             st.info("수신된 경보가 없습니다.")
         else:
             df = pd.DataFrame(st.session_state.latest_alerts)
-            df['timestamp'] = pd.to_datetime(df['timestamp']).dt.tz_localize('UTC').dt.tz_convert('Asia/Seoul')
-            display_df = df.rename(columns={"timestamp": "발생 시각", "type": "유형", "message": "메시지"})
-            st.dataframe(
-                display_df[['발생 시각', '유형', '메시지']].sort_values(by="발생 시각", ascending=False),
-                use_container_width=True,
-                hide_index=True
-            )
+            
+            # --- START: 에러 수정 부분 ---
+            # 타임스탬프 열이 존재하면 시간대 변환
+            if 'timestamp' in df.columns:
+                df['timestamp'] = pd.to_datetime(df['timestamp']).dt.tz_localize('UTC').dt.tz_convert('Asia/Seoul')
+
+            # 표시할 열과 새 이름을 정의
+            column_map = {
+                "timestamp": "발생 시각",
+                "type": "유형",
+                "message": "메시지"
+            }
+            
+            # DataFrame에 실제 존재하는 열만 필터링
+            existing_columns = [col for col in column_map.keys() if col in df.columns]
+            
+            if not existing_columns:
+                st.warning("표시할 수 있는 유효한 경보 데이터가 없습니다.")
+            else:
+                # 존재하는 열만 이름 변경
+                display_df = df[existing_columns].rename(columns=column_map)
+                
+                # 정렬 기준 열('발생 시각')이 존재하는 경우에만 정렬
+                if "발생 시각" in display_df.columns:
+                    display_df = display_df.sort_values(by="발생 시각", ascending=False)
+
+                st.dataframe(
+                    display_df,
+                    use_container_width=True,
+                    hide_index=True
+                )
+            # --- END: 에러 수정 부분 ---
 
     def _render_sensor_dashboard(self):
         """실시간 센서 모니터링 페이지를 렌더링합니다."""
@@ -695,3 +720,4 @@ if __name__ == "__main__":
     if 'app' not in st.session_state:
         st.session_state.app = UnifiedDashboard()
     st.session_state.app.run()
+
