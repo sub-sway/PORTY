@@ -54,7 +54,6 @@ try:
     OXYGEN_SAFE_MAX = 23.5
     NO2_WARN_LIMIT = 3.0
     NO2_DANGER_LIMIT = 5.0
-    DISTANCE_WARN_LIMIT = 10.0 # <-- 충돌 경고 거리 기준 (10cm)
 except KeyError as e:
     st.error(f"st.secrets에 필수 설정이 누락되었습니다: {e}. secrets.toml 파일을 확인해주세요.", icon="🚨")
     st.stop()
@@ -139,7 +138,6 @@ def start_mqtt_clients():
 
     # 2. 센서 모니터링 클라이언트 (TLS)
     sensors_queue = get_sensors_queue()
-
     def on_connect_sensors(client, userdata, flags, rc, properties=None):
         if rc == 0:
             logging.info(f"센서 MQTT 연결 성공. 토픽 구독: '{SENSORS_TOPIC}'")
@@ -149,16 +147,12 @@ def start_mqtt_clients():
 
     def on_message_sensors(client, userdata, msg):
         try:
-            payload = msg.payload.decode().strip()
-            sensors_queue.put(payload)
+            sensors_queue.put(msg.payload.decode().strip())
         except Exception as e:
-            logging.error(f"SENSOR MESSAGE 처리 실패. Error: {e}. Payload: {msg.payload.decode()}", exc_info=True)
+            logging.error(f"센서 메시지 수신 중 오류: {e}")
 
     try:
-        sensors_client = mqtt.Client(
-            client_id=f"st-sensors-{random.randint(0, 1000)}",
-            callback_api_version=mqtt.CallbackAPIVersion.VERSION2
-        )
+        sensors_client = mqtt.Client(client_id=f"st-sensors-{random.randint(0, 1000)}", callback_api_version=mqtt.CallbackAPIVersion.VERSION2)
         sensors_client.username_pw_set(HIVE_USERNAME_SENSORS, HIVE_PASSWORD_SENSORS)
         sensors_client.tls_set(cert_reqs=ssl.CERT_REQUIRED, tls_version=ssl.PROTOCOL_TLS)
         sensors_client.on_connect = on_connect_sensors
@@ -166,8 +160,10 @@ def start_mqtt_clients():
         sensors_client.connect(HIVE_BROKER, SENSORS_PORT, 60)
         sensors_client.loop_start()
         clients['sensors'] = sensors_client
+        logging.info("센서 MQTT 클라이언트 시작됨.")
     except Exception as e:
         st.error(f"센서 MQTT 연결 실패: {e}", icon="🚨")
+        logging.error(f"센서 MQTT 연결 실패: {e}")
 
     return clients
 
@@ -197,6 +193,7 @@ class UnifiedDashboard:
             'last_sensor_values': {"CH4": 0.0, "EtOH": 0.0, "H2": 0.0, "NH3": 0.0, "CO": 0.0},
             'sound_primed': False,
             'play_sound_trigger': None,
+            'sensor_data_loaded': False,
         }
         for key, value in defaults.items():
             if key not in st.session_state:
@@ -278,6 +275,15 @@ class UnifiedDashboard:
             log_alert(msg)
             trigger_ui_alert(msg, "🔥", "fire")
 
+        # --- 여기부터 추가 ---
+        distance_val = data_dict.get("Distance")
+        if distance_val is not None and distance_val <= 20:
+            # 20cm 이하일 때 경고
+            msg = f"⚠️ 근접 경고! 물체와의 거리가 {distance_val:.1f} cm 입니다!"
+            log_alert(msg)
+            trigger_ui_alert(msg, "⚠️", "safety") # 'safety' 알림음 사용
+        # --- 여기까지 추가 ---
+
         oxygen_val = data_dict.get("Oxygen")
         if oxygen_val is not None and not (OXYGEN_SAFE_MIN <= oxygen_val <= OXYGEN_SAFE_MAX):
             msg = f"🟠 산소 농도 경고! 현재 값: {oxygen_val:.1f}%"
@@ -291,12 +297,6 @@ class UnifiedDashboard:
             elif no2_val >= NO2_WARN_LIMIT:
                 msg = f"🟡 이산화질소(NO2) 주의! 현재 값: {no2_val:.3f} ppm"
                 log_alert(msg)
-        
-        distance_val = data_dict.get("Distance")
-        if distance_val is not None and distance_val < DISTANCE_WARN_LIMIT:
-            msg = f"💥 충돌 주의! 전방 거리: {distance_val:.1f} cm"
-            log_alert(msg)
-
 
         newly_detected_gases = []
         gas_sensors = ["CH4", "EtOH", "H2", "NH3", "CO"]
@@ -326,7 +326,7 @@ class UnifiedDashboard:
             with cols[i]:
                 if st.button(
                     page_title,
-                    use_container_width=True,
+                    width='stretch',
                     type="primary" if st.session_state.page == page_key else "secondary"
                 ):
                     st.session_state.page = page_key
@@ -403,57 +403,46 @@ class UnifiedDashboard:
             st.info("수신된 경보가 없습니다.")
         else:
             df = pd.DataFrame(st.session_state.latest_alerts)
+            df['timestamp'] = pd.to_datetime(df['timestamp']).dt.tz_localize('UTC').dt.tz_convert('Asia/Seoul')
             
-            # --- START: 에러 수정 부분 ---
-            # 타임스탬프 열이 존재하면 시간대 변환
-            if 'timestamp' in df.columns:
-                df['timestamp'] = pd.to_datetime(df['timestamp']).dt.tz_localize('UTC').dt.tz_convert('Asia/Seoul')
+            display_df = df.rename(columns={"timestamp": "발생 시각", "type": "유형", "message": "메시지"})
+            
+            desired_columns = ['발생 시각', '유형', '메시지']
+            
+            columns_to_display = [col for col in desired_columns if col in display_df.columns]
 
-            # 표시할 열과 새 이름을 정의
-            column_map = {
-                "timestamp": "발생 시각",
-                "type": "유형",
-                "message": "메시지"
-            }
-            
-            # DataFrame에 실제 존재하는 열만 필터링
-            existing_columns = [col for col in column_map.keys() if col in df.columns]
-            
-            if not existing_columns:
-                st.warning("표시할 수 있는 유효한 경보 데이터가 없습니다.")
-            else:
-                # 존재하는 열만 이름 변경
-                display_df = df[existing_columns].rename(columns=column_map)
-                
-                # 정렬 기준 열('발생 시각')이 존재하는 경우에만 정렬
-                if "발생 시각" in display_df.columns:
-                    display_df = display_df.sort_values(by="발생 시각", ascending=False)
-
+            if columns_to_display:
                 st.dataframe(
-                    display_df,
-                    use_container_width=True,
+                    display_df[columns_to_display].sort_values(by="발생 시각", ascending=False),
+                    width='stretch',
                     hide_index=True
                 )
-            # --- END: 에러 수정 부분 ---
+            else:
+                st.warning("경보 데이터는 있으나 표시할 내용이 없습니다.")
 
     def _render_sensor_dashboard(self):
         """실시간 센서 모니터링 페이지를 렌더링합니다."""
         st.header("실시간 센서 모니터링")
-        df = st.session_state.live_df
-        if df.empty and self.collections:
+
+        if not st.session_state.sensor_data_loaded and self.collections:
             try:
-                records = list(self.collections['sensors'].find().sort("timestamp", -1).limit(1000))
-                if records:
-                    temp_df = pd.DataFrame(reversed(records))
-                    temp_df['timestamp'] = pd.to_datetime(temp_df['timestamp'])
-                    if temp_df['timestamp'].dt.tz is None:
-                        temp_df['timestamp'] = temp_df['timestamp'].dt.tz_localize('UTC')
-                    else:
-                        temp_df['timestamp'] = temp_df['timestamp'].dt.tz_convert('UTC')
-                    st.session_state.live_df = temp_df
-                    df = st.session_state.live_df
+                with st.spinner("처음 한 번만 과거 센서 데이터를 불러옵니다..."):
+                    records = list(self.collections['sensors'].find().sort("timestamp", -1).limit(1000))
+                    if records:
+                        temp_df = pd.DataFrame(reversed(records))
+                        temp_df['timestamp'] = pd.to_datetime(temp_df['timestamp'])
+                        if temp_df['timestamp'].dt.tz is None:
+                            temp_df['timestamp'] = temp_df['timestamp'].dt.tz_localize('UTC')
+                        else:
+                            temp_df['timestamp'] = temp_df['timestamp'].dt.tz_convert('UTC')
+                        st.session_state.live_df = temp_df
+                
+                st.session_state.sensor_data_loaded = True
+                st.rerun()
             except Exception as e:
                 st.error(f"초기 센서 데이터 로드 실패: {e}")
+        
+        df = st.session_state.live_df
 
         st.subheader("📡 실시간 수신 상태")
         status_cols = st.columns(3)
@@ -479,19 +468,12 @@ class UnifiedDashboard:
             oxygen_unsafe = not (OXYGEN_SAFE_MIN <= latest_data.get("Oxygen", 20.9) <= OXYGEN_SAFE_MAX)
             no2_dangerous = latest_data.get("NO2", 0) >= NO2_DANGER_LIMIT
             no2_warning = latest_data.get("NO2", 0) >= NO2_WARN_LIMIT
-            # Distance 값을 가져와 충돌 위험을 확인합니다. 기본값은 100으로 설정하여 데이터가 없을 때 경고가 뜨지 않도록 합니다.
-            distance_val = latest_data.get("Distance", 100)
-            collision_warning = distance_val < DISTANCE_WARN_LIMIT
-            
-            conditions = [flame_detected, oxygen_unsafe, no2_dangerous, no2_warning, collision_warning]
+            conditions = [flame_detected, oxygen_unsafe, no2_dangerous, no2_warning]
 
             if flame_detected: st.error("🔥 불꽃 감지됨!", icon="🔥")
             if oxygen_unsafe: st.warning(f"🟠 산소 농도 경고! 현재 {latest_data.get('Oxygen', 0):.1f}%", icon="⚠️")
             if no2_dangerous: st.error(f"🔴 이산화질소(NO2) 농도 위험! 현재 {latest_data.get('NO2', 0):.3f} ppm", icon="☣️")
             elif no2_warning: st.warning(f"🟡 이산화질소(NO2) 농도 주의! 현재 {latest_data.get('NO2', 0):.3f} ppm", icon="⚠️")
-            
-            # 충돌 경고 메시지를 표시합니다.
-            if collision_warning: st.warning(f"💥 충돌 주의! 전방 거리: {distance_val:.1f} cm", icon="💥")
 
             if not any(conditions):
                 st.success("✅ 안정 범위 내에 있습니다.", icon="👍")
@@ -519,10 +501,10 @@ class UnifiedDashboard:
                 config = {'responsive': True, 'displayModeBar': False}
                 for i in range(0, len(sensors_for_graph), 2):
                     graph_cols = st.columns(2)
-                    for j, sensor in enumerate(sensors_for_graph[i:i+2]):
-                        if sensor in df.columns:
+                    for j, sensor_name in enumerate(sensors_for_graph[i:i+2]):
+                        if sensor_name in df.columns:
                             with graph_cols[j]:
-                                fig = px.line(df, x="timestamp", y=sensor, title=f"{sensor} 변화 추세")
+                                fig = px.line(df, x="timestamp", y=sensor_name, title=f"{sensor_name} 변화 추세")
                                 fig.update_layout(
                                     margin=dict(l=20, r=20, t=40, b=20),
                                     xaxis_title="시간",
@@ -553,7 +535,7 @@ class UnifiedDashboard:
                             except ValueError:
                                 log_entries.append({"감지 시간 (KST)": parts[0], "메시지": parts[1].strip()})
                     log_df = pd.DataFrame(log_entries)
-                    st.dataframe(log_df, use_container_width=True, hide_index=True)
+                    st.dataframe(log_df, width='stretch', hide_index=True)
 
                     csv_data = log_df.to_csv(index=False).encode('utf-8-sig')
                     st.download_button(
@@ -561,7 +543,7 @@ class UnifiedDashboard:
                         data=csv_data,
                         file_name=f"sensor_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
                         mime="text/csv",
-                        use_container_width=True
+                        width='stretch'
                     )
                     st.divider()
                     if st.button("🚨 로그 전체 삭제", type="primary"):
@@ -592,7 +574,7 @@ class UnifiedDashboard:
                         with col1:
                             if 'annotated_image_base64' in doc:
                                 img_bytes = base64.b64decode(doc['annotated_image_base64'])
-                                st.image(img_bytes, caption="감지 결과 이미지", use_column_width=True)
+                                st.image(img_bytes, caption="감지 결과 이미지", width='stretch')
                         with col2:
                             st.subheader("상세 감지 정보")
                             detections = doc.get('detections', [])
@@ -627,7 +609,7 @@ class UnifiedDashboard:
                         col1, col2 = st.columns([2, 1])
                         with col1:
                             img_bytes = base64.b64decode(doc['annotated_image_base64'])
-                            st.image(img_bytes, caption="감지 결과 이미지", use_column_width=True)
+                            st.image(img_bytes, caption="감지 결과 이미지", width='stretch')
                         with col2:
                             st.subheader("상세 감지 정보")
                             detections = doc.get('detections', [])
@@ -647,30 +629,23 @@ class UnifiedDashboard:
             st.warning("데이터베이스에 연결할 수 없어 안전 조끼 데이터를 표시할 수 없습니다.")
 
     def _handle_audio_playback(self):
-        """
-        지정된 경로의 .wav 파일을 Base64로 인코딩하여 재생합니다.
-        """
-        
-        # 1. 트리거가 없으면 함수를 즉시 종료
+        """지정된 경로의 .wav 파일을 Base64로 인코딩하여 재생합니다."""
         if not (trigger := st.session_state.play_sound_trigger):
             return
 
-        # 2. 알림음이 비활성화 상태이면 경고 메시지만 표시
         if not st.session_state.get('sound_enabled', False):
             st.toast("⚠️ 알림음을 들으려면 사이드바에서 '알림음 활성화'를 켜주세요.")
-            st.session_state.play_sound_trigger = None # 트리거 초기화
+            st.session_state.play_sound_trigger = None
             return
 
-        # 3. 트리거 종류에 따라 파일 이름 결정
         if trigger == 'fire':
             filename = 'fire_alert.wav'
         elif trigger == 'safety':
             filename = 'safety_alert.wav'
         else:
-            st.session_state.play_sound_trigger = None # 모르는 트리거면 초기화
+            st.session_state.play_sound_trigger = None
             return
 
-        # 4. 파일 경로 설정 및 파일 존재 여부 확인
         file_path = os.path.join('app', 'static', filename)
         
         if not os.path.exists(file_path):
@@ -678,7 +653,6 @@ class UnifiedDashboard:
             st.session_state.play_sound_trigger = None
             return
 
-        # 5. 파일을 읽고 Base64로 인코딩하여 재생
         try:
             with open(file_path, "rb") as f:
                 audio_bytes = f.read()
@@ -693,7 +667,6 @@ class UnifiedDashboard:
             st.error(f"음성 파일 재생 중 오류: {e}")
         
         finally:
-            # 6. 재생 후 트리거 초기화
             st.session_state.play_sound_trigger = None
 
     def run(self):
@@ -720,4 +693,3 @@ if __name__ == "__main__":
     if 'app' not in st.session_state:
         st.session_state.app = UnifiedDashboard()
     st.session_state.app.run()
-
