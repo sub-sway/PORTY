@@ -182,7 +182,6 @@ class UnifiedDashboard:
         self.sensors_queue = get_sensors_queue()
         self._initialize_state()
 
-    # --- [수정된 부분 1] ---
     def _initialize_state(self):
         """세션 상태 변수 초기화"""
         defaults = {
@@ -194,7 +193,7 @@ class UnifiedDashboard:
             'last_sensor_values': {"CH4": 0.0, "EtOH": 0.0, "H2": 0.0, "NH3": 0.0, "CO": 0.0},
             'sound_primed': False,
             'play_sound_trigger': None,
-            'sensor_data_loaded': False,  # <-- 데이터 로딩 상태를 추적할 플래그 추가
+            'sensor_data_loaded': False,
         }
         for key, value in defaults.items():
             if key not in st.session_state:
@@ -318,7 +317,7 @@ class UnifiedDashboard:
             with cols[i]:
                 if st.button(
                     page_title,
-                    use_container_width=True,
+                    width='stretch',  # [수정] use_container_width=True -> width='stretch'
                     type="primary" if st.session_state.page == page_key else "secondary"
                 ):
                     st.session_state.page = page_key
@@ -399,16 +398,14 @@ class UnifiedDashboard:
             display_df = df.rename(columns={"timestamp": "발생 시각", "type": "유형", "message": "메시지"})
             st.dataframe(
                 display_df[['발생 시각', '유형', '메시지']].sort_values(by="발생 시각", ascending=False),
-                use_container_width=True,
+                width='stretch',  # [수정] use_container_width=True -> width='stretch'
                 hide_index=True
             )
 
-    # --- [수정된 부분 2] ---
     def _render_sensor_dashboard(self):
         """실시간 센서 모니터링 페이지를 렌더링합니다."""
         st.header("실시간 센서 모니터링")
 
-        # 앱 세션에서 단 한번만 MongoDB에서 초기 데이터를 로드합니다.
         if not st.session_state.sensor_data_loaded and self.collections:
             try:
                 with st.spinner("처음 한 번만 과거 센서 데이터를 불러옵니다..."):
@@ -422,9 +419,8 @@ class UnifiedDashboard:
                             temp_df['timestamp'] = temp_df['timestamp'].dt.tz_convert('UTC')
                         st.session_state.live_df = temp_df
                 
-                # 데이터 로딩이 성공하면 플래그를 True로 설정하여 다시 로드하지 않도록 합니다.
                 st.session_state.sensor_data_loaded = True
-                st.rerun() # 데이터를 불러온 후 즉시 화면을 다시 그려서 spinner를 지웁니다.
+                st.rerun()
             except Exception as e:
                 st.error(f"초기 센서 데이터 로드 실패: {e}")
         
@@ -496,7 +492,7 @@ class UnifiedDashboard:
                                     xaxis_title="시간",
                                     yaxis_title="값"
                                 )
-                                st.plotly_chart(fig, use_container_width=True, config=config)
+                                st.plotly_chart(fig, use_container_width=True, config=config) # plotly는 아직 use_container_width 사용
 
     def _render_sensor_log_page(self):
         """센서 이벤트 로그 페이지를 렌더링합니다."""
@@ -521,7 +517,7 @@ class UnifiedDashboard:
                             except ValueError:
                                 log_entries.append({"감지 시간 (KST)": parts[0], "메시지": parts[1].strip()})
                     log_df = pd.DataFrame(log_entries)
-                    st.dataframe(log_df, use_container_width=True, hide_index=True)
+                    st.dataframe(log_df, width='stretch', hide_index=True) # [수정] use_container_width=True -> width='stretch'
 
                     csv_data = log_df.to_csv(index=False).encode('utf-8-sig')
                     st.download_button(
@@ -529,7 +525,7 @@ class UnifiedDashboard:
                         data=csv_data,
                         file_name=f"sensor_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
                         mime="text/csv",
-                        use_container_width=True
+                        width='stretch' # [수정] use_container_width=True -> width='stretch'
                     )
                     st.divider()
                     if st.button("🚨 로그 전체 삭제", type="primary"):
@@ -560,7 +556,7 @@ class UnifiedDashboard:
                         with col1:
                             if 'annotated_image_base64' in doc:
                                 img_bytes = base64.b64decode(doc['annotated_image_base64'])
-                                st.image(img_bytes, caption="감지 결과 이미지", use_column_width=True)
+                                st.image(img_bytes, caption="감지 결과 이미지", width='stretch') # [수정] use_column_width=True -> width='stretch'
                         with col2:
                             st.subheader("상세 감지 정보")
                             detections = doc.get('detections', [])
@@ -595,7 +591,7 @@ class UnifiedDashboard:
                         col1, col2 = st.columns([2, 1])
                         with col1:
                             img_bytes = base64.b64decode(doc['annotated_image_base64'])
-                            st.image(img_bytes, caption="감지 결과 이미지", use_column_width=True)
+                            st.image(img_bytes, caption="감지 결과 이미지", width='stretch') # [수정] use_column_width=True -> width='stretch'
                         with col2:
                             st.subheader("상세 감지 정보")
                             detections = doc.get('detections', [])
