@@ -201,36 +201,33 @@ class UnifiedDashboard:
 
     def _process_queues(self):
 
-
-
-        
     # 1. 안전 경보 큐 처리
-    while not self.alerts_queue.empty():
-        msg = self.alerts_queue.get()
-        alert_type = msg.get("type")
-        if alert_type in ["fire", "safety"]:
-            if st.session_state.get('sound_enabled', False):
-                st.session_state.play_sound_trigger = alert_type
-            st.toast(
-                f"🔥 긴급: 화재 경보 발생!" if alert_type == "fire" else f"⚠️ 주의: 안전조끼 미착용 감지!",
-                icon="🔥" if alert_type == "fire" else "⚠️"
-            )
-
-        if msg.get("type") == "normal":
-            st.session_state.current_status = msg
-            continue
-
-        try:
-            msg['timestamp'] = datetime.strptime(msg['timestamp'], "%Y-%m-%d %H:%M:%S")
-        except (ValueError, TypeError):
-            msg['timestamp'] = datetime.now()
-
-        st.session_state.latest_alerts.insert(0, msg)
-        if len(st.session_state.latest_alerts) > 100:
-            st.session_state.latest_alerts.pop()
-
-        if self.collections and 'alerts' in self.collections:
-            self.collections['alerts'].insert_one(msg.copy())
+        while not self.alerts_queue.empty():
+            msg = self.alerts_queue.get()
+            alert_type = msg.get("type")
+            if alert_type in ["fire", "safety"]:
+                if st.session_state.get('sound_enabled', False):
+                    st.session_state.play_sound_trigger = alert_type
+                st.toast(
+                    f"🔥 긴급: 화재 경보 발생!" if alert_type == "fire" else f"⚠️ 주의: 안전조끼 미착용 감지!",
+                    icon="🔥" if alert_type == "fire" else "⚠️"
+                )
+    
+            if msg.get("type") == "normal":
+                st.session_state.current_status = msg
+                continue
+    
+            try:
+                msg['timestamp'] = datetime.strptime(msg['timestamp'], "%Y-%m-%d %H:%M:%S")
+            except (ValueError, TypeError):
+                msg['timestamp'] = datetime.now()
+    
+            st.session_state.latest_alerts.insert(0, msg)
+            if len(st.session_state.latest_alerts) > 100:
+                st.session_state.latest_alerts.pop()
+    
+            if self.collections and 'alerts' in self.collections:
+                self.collections['alerts'].insert_one(msg.copy())
 
     # 2. 센서 데이터 큐 처리
     sensor_keys = ["CH4", "EtOH", "H2", "NH3", "CO", "NO2", "Oxygen", "Distance", "Flame"]
