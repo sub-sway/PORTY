@@ -200,8 +200,8 @@ class UnifiedDashboard:
                 st.session_state[key] = value
 
     def _process_queues(self):
-
-    # 1. 안전 경보 큐 처리
+        """MQTT 메시지 큐를 처리하여 데이터를 업데이트합니다."""
+        # 1. 안전 경보 큐 처리
         while not self.alerts_queue.empty():
             msg = self.alerts_queue.get()
             alert_type = msg.get("type")
@@ -212,68 +212,49 @@ class UnifiedDashboard:
                     f"🔥 긴급: 화재 경보 발생!" if alert_type == "fire" else f"⚠️ 주의: 안전조끼 미착용 감지!",
                     icon="🔥" if alert_type == "fire" else "⚠️"
                 )
-    
+
             if msg.get("type") == "normal":
                 st.session_state.current_status = msg
                 continue
-    
+
             try:
                 msg['timestamp'] = datetime.strptime(msg['timestamp'], "%Y-%m-%d %H:%M:%S")
             except (ValueError, TypeError):
                 msg['timestamp'] = datetime.now()
-    
+
             st.session_state.latest_alerts.insert(0, msg)
             if len(st.session_state.latest_alerts) > 100:
                 st.session_state.latest_alerts.pop()
-    
             if self.collections and 'alerts' in self.collections:
                 self.collections['alerts'].insert_one(msg.copy())
 
-    # 2. 센서 데이터 큐 처리
-    sensor_keys = ["CH4", "EtOH", "H2", "NH3", "CO", "NO2", "Oxygen", "Distance", "Flame"]
-    new_data = []
+        # 2. 센서 데이터 큐 처리
+        sensor_keys = ["CH4", "EtOH", "H2", "NH3", "CO", "NO2", "Oxygen", "Distance", "Flame"]
+        new_data = []
+        while not self.sensors_queue.empty():
+            payload = self.sensors_queue.get()
+            try:
+                values = [float(v.strip()) for v in payload.split(',')]
+                if len(values) != len(sensor_keys):
+                    logging.warning(f"센서 데이터 값 개수 불일치. 페이로드: {payload}")
+                    continue
 
-    while not self.sensors_queue.empty():
-        payload = self.sensors_queue.get()
-        try:
-            values = [float(v.strip()) for v in payload.split(',')]
-            if len(values) != len(sensor_keys):
-                logging.warning(f"센서 데이터 값 개수 불일치. 페이로드: {payload}")
-                continue
+                data_dict = dict(zip(sensor_keys, values))
+                data_dict['Flame'] = int(data_dict['Flame'])
+                data_dict['timestamp'] = datetime.now(timezone.utc)
+                self._check_and_trigger_sensor_alerts(data_dict)
+                new_data.append(data_dict)
+                if self.collections and 'sensors' in self.collections:
+                    self.collections['sensors'].insert_one(data_dict.copy())
+            except (ValueError, IndexError) as e:
+                logging.warning(f"센서 데이터 파싱 오류: {e} - 페이로드: {payload}")
 
-            data_dict = dict(zip(sensor_keys, values))
-            data_dict['Flame'] = int(data_dict['Flame'])
-            data_dict['timestamp'] = datetime.now(timezone.utc)
-
-            # 경고 감지 함수 호출
-            self._check_and_trigger_sensor_alerts(data_dict)
-
-            new_data.append(data_dict)
-
-            # MongoDB에 저장
-            if self.collections and 'sensors' in self.collections:
-                self.collections['sensors'].insert_one(data_dict.copy())
-
-        except (ValueError, IndexError) as e:
-            logging.warning(f"센서 데이터 파싱 오류: {e} - 페이로드: {payload}")
-
-    # 3. 새로운 센서 데이터를 세션 상태에 추가
-    if new_data:
-        new_df = pd.DataFrame(new_data)
-        new_df['timestamp'] = pd.to_datetime(new_df['timestamp']).dt.tz_convert('UTC')
-        st.session_state.live_df = pd.concat([st.session_state.live_df, new_df], ignore_index=True)
-
-        # 최근 1000개까지만 유지
-        if len(st.session_state.live_df) > 1000:
-            st.session_state.live_df = st.session_state.live_df.iloc[-1000:]
-
-    # ✅ 4. 큐 비우기 (중복 로그 방지)
-    # 모든 메시지를 정상적으로 처리한 후에만 큐 초기화
-    if not self.alerts_queue.empty():
-        self.alerts_queue.queue.clear()
-    if not self.sensors_queue.empty():
-        self.sensors_queue.queue.clear()
-
+        if new_data:
+            new_df = pd.DataFrame(new_data)
+            new_df['timestamp'] = pd.to_datetime(new_df['timestamp']).dt.tz_convert('UTC')
+            st.session_state.live_df = pd.concat([st.session_state.live_df, new_df], ignore_index=True)
+            if len(st.session_state.live_df) > 1000:
+                st.session_state.live_df = st.session_state.live_df.iloc[-1000:]
 
     def _check_and_trigger_sensor_alerts(self, data_dict):
         """센서 데이터를 확인하고 조건에 따라 경고를 발생시킵니다."""
@@ -293,15 +274,6 @@ class UnifiedDashboard:
             msg = "🔥 긴급: 불꽃 감지됨! 즉시 확인이 필요합니다!"
             log_alert(msg)
             trigger_ui_alert(msg, "🔥", "fire")
-
-        # --- 여기부터 추가 ---
-        distance_val = data_dict.get("Distance")
-        if distance_val is not None and distance_val <= 20:
-            # 20cm 이하일 때 경고
-            msg = f"⚠️ 근접 경고! 물체와의 거리가 {distance_val:.1f} cm 입니다!"
-            log_alert(msg)
-            trigger_ui_alert(msg, "⚠️", "safety") # 'safety' 알림음 사용
-        # --- 여기까지 추가 ---
 
         oxygen_val = data_dict.get("Oxygen")
         if oxygen_val is not None and not (OXYGEN_SAFE_MIN <= oxygen_val <= OXYGEN_SAFE_MAX):
@@ -693,7 +665,6 @@ class UnifiedDashboard:
         self._render_header_and_nav()
         self._render_sidebar()
         self._process_queues()
-        
 
         page_map = {
             'main': self._render_main_page,
