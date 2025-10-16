@@ -303,7 +303,7 @@ class UnifiedDashboard:
             log_alert(msg)
 
     def _render_header_and_nav(self):
-        """페이지 상단의 제목과 네비게이션 버튼을 렌더링합니다."""
+        # 페이지 상단의 제목과 네비게이션 버튼을 렌더링합니다.
         st.title("🛡️ 통합 모니터링 대시보드")
         pages = {
             'main': '🏠 안전 모니터링',
