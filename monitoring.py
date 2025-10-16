@@ -200,6 +200,10 @@ class UnifiedDashboard:
                 st.session_state[key] = value
 
     def _process_queues(self):
+
+
+
+        
     # 1. 안전 경보 큐 처리
     while not self.alerts_queue.empty():
         msg = self.alerts_queue.get()
