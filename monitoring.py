@@ -26,7 +26,7 @@ logging.basicConfig(
 try:
     # 안전 모니터링 대시보드용 설정
     HIVE_BROKER = st.secrets["HIVE_BROKER"]
-    MONGO_URI = st.secrets["MONGO_URI"]  # 공통 URI
+    MONGO = st.secrets["MONGO_URI"]  # 공통 URI
     HIVE_USERNAME_ALERTS = st.secrets["HIVE_USERNAME_ALERTS"]
     HIVE_PASSWORD_ALERTS = st.secrets["HIVE_PASSWORD_ALERTS"]
     ALERTS_PORT = 8884
@@ -77,7 +77,7 @@ def get_mongo_collections():
     collections = {}
     try:
         logging.info("MongoDB에 연결을 시도합니다...")
-        client = pymongo.MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
+        client = pymongo.MongoClient(MONGO, serverSelectionTimeoutMS=5000)
         client.admin.command('ping')
         logging.info("✅ MongoDB 연결 성공.")
 
