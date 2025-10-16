@@ -138,7 +138,6 @@ def start_mqtt_clients():
 
     # 2. 센서 모니터링 클라이언트 (TLS)
     sensors_queue = get_sensors_queue()
-
     def on_connect_sensors(client, userdata, flags, rc, properties=None):
         if rc == 0:
             logging.info(f"센서 MQTT 연결 성공. 토픽 구독: '{SENSORS_TOPIC}'")
@@ -148,28 +147,23 @@ def start_mqtt_clients():
 
     def on_message_sensors(client, userdata, msg):
         try:
-            payload = msg.payload.decode().strip()
-            sensors_queue.put(payload)
+            sensors_queue.put(msg.payload.decode().strip())
         except Exception as e:
-            logging.error(f"SENSOR MESSAGE 처리 실패. Error: {e}. Payload: {msg.payload.decode()}", exc_info=True)
+            logging.error(f"센서 메시지 수신 중 오류: {e}")
 
     try:
-        sensors_client = mqtt.Client(
-            client_id=f"st-sensors-{random.randint(0, 1000)}",
-            callback_api_version=mqtt.CallbackAPIVersion.VERSION2
-        )
+        sensors_client = mqtt.Client(client_id=f"st-sensors-{random.randint(0, 1000)}", callback_api_version=mqtt.CallbackAPIVersion.VERSION2)
         sensors_client.username_pw_set(HIVE_USERNAME_SENSORS, HIVE_PASSWORD_SENSORS)
-        
-        # 이전 답변에서 수정된 부분: CERT_NONE 사용
-        sensors_client.tls_set(cert_reqs=ssl.CERT_NONE)
-        
+        sensors_client.tls_set(cert_reqs=ssl.CERT_REQUIRED, tls_version=ssl.PROTOCOL_TLS)
         sensors_client.on_connect = on_connect_sensors
         sensors_client.on_message = on_message_sensors
         sensors_client.connect(HIVE_BROKER, SENSORS_PORT, 60)
         sensors_client.loop_start()
         clients['sensors'] = sensors_client
+        logging.info("센서 MQTT 클라이언트 시작됨.")
     except Exception as e:
         st.error(f"센서 MQTT 연결 실패: {e}", icon="🚨")
+        logging.error(f"센서 MQTT 연결 실패: {e}")
 
     return clients
 
