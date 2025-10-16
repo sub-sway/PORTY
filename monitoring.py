@@ -303,7 +303,7 @@ class UnifiedDashboard:
             log_alert(msg)
 
     def _render_header_and_nav(self):
-        # 페이지 상단의 제목과 네비게이션 버튼을 렌더링합니다.
+        """페이지 상단의 제목과 네비게이션 버튼을 렌더링합니다."""
         st.title("🛡️ 통합 모니터링 대시보드")
         pages = {
             'main': '🏠 안전 모니터링',
@@ -317,7 +317,7 @@ class UnifiedDashboard:
             with cols[i]:
                 if st.button(
                     page_title,
-                    width='stretch',  # [수정] use_container_width=True -> width='stretch'
+                    width='stretch',
                     type="primary" if st.session_state.page == page_key else "secondary"
                 ):
                     st.session_state.page = page_key
@@ -364,57 +364,52 @@ class UnifiedDashboard:
                 st.warning("알림음 비활성화 상태")
 
     def _render_main_page(self):
-    """메인 대시보드 페이지(안전 모니터링)를 렌더링합니다."""
-    st.header("항만시설 현장 안전 모니터링")
-    if not st.session_state.latest_alerts and self.collections:
-        try:
-            query = {"type": {"$ne": "normal"}}
-            alerts = list(self.collections['alerts'].find(query).sort("timestamp", pymongo.DESCENDING).limit(5))
-            st.session_state.latest_alerts = alerts
-        except Exception as e:
-            st.error(f"초기 경보 데이터 로드 실패: {e}")
+        """메인 대시보드 페이지(안전 모니터링)를 렌더링합니다."""
+        st.header("항만시설 현장 안전 모니터링")
+        if not st.session_state.latest_alerts and self.collections:
+            try:
+                query = {"type": {"$ne": "normal"}}
+                alerts = list(self.collections['alerts'].find(query).sort("timestamp", pymongo.DESCENDING).limit(5))
+                st.session_state.latest_alerts = alerts
+            except Exception as e:
+                st.error(f"초기 경보 데이터 로드 실패: {e}")
 
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        st.subheader("📡 시스템 현재 상태")
-        status_message = st.session_state.current_status.get("message", "상태 정보 없음")
-        status_time = st.session_state.current_status.get("timestamp", "N/A")
-        st.info(f"{status_message} (마지막 신호: {status_time})")
-    with col2:
-        st.subheader("MQTT 연결 상태")
-        client = self.clients.get('alerts')
-        if client and client.is_connected():
-            st.success("🟢 실시간 수신 중")
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            st.subheader("📡 시스템 현재 상태")
+            status_message = st.session_state.current_status.get("message", "상태 정보 없음")
+            status_time = st.session_state.current_status.get("timestamp", "N/A")
+            st.info(f"{status_message} (마지막 신호: {status_time})")
+        with col2:
+            st.subheader("MQTT 연결 상태")
+            client = self.clients.get('alerts')
+            if client and client.is_connected():
+                st.success("🟢 실시간 수신 중")
+            else:
+                st.error("🔴 연결 끊김")
+
+        st.divider()
+        st.subheader("🚨 최근 경보 내역")
+        if not st.session_state.latest_alerts:
+            st.info("수신된 경보가 없습니다.")
         else:
-            st.error("🔴 연결 끊김")
+            df = pd.DataFrame(st.session_state.latest_alerts)
+            df['timestamp'] = pd.to_datetime(df['timestamp']).dt.tz_localize('UTC').dt.tz_convert('Asia/Seoul')
+            
+            display_df = df.rename(columns={"timestamp": "발생 시각", "type": "유형", "message": "메시지"})
+            
+            desired_columns = ['발생 시각', '유형', '메시지']
+            
+            columns_to_display = [col for col in desired_columns if col in display_df.columns]
 
-    st.divider()
-    st.subheader("🚨 최근 경보 내역")
-    if not st.session_state.latest_alerts:
-        st.info("수신된 경보가 없습니다.")
-    else:
-        df = pd.DataFrame(st.session_state.latest_alerts)
-        df['timestamp'] = pd.to_datetime(df['timestamp']).dt.tz_localize('UTC').dt.tz_convert('Asia/Seoul')
-        
-        # [수정] 존재하는 열만 이름 변경
-        display_df = df.rename(columns={"timestamp": "발생 시각", "type": "유형", "message": "메시지"})
-        
-        # [수정] 표시하려는 열 목록 정의
-        desired_columns = ['발생 시각', '유형', '메시지']
-        
-        # [수정] 데이터프레임에 실제 존재하는 열만 필터링
-        columns_to_display = [col for col in desired_columns if col in display_df.columns]
-
-        # [수정] 필터링된 열만 사용하여 데이터프레임 표시
-        if columns_to_display:
-            st.dataframe(
-                display_df[columns_to_display].sort_values(by="발생 시각", ascending=False),
-                width='stretch',
-                hide_index=True
-            )
-        else:
-            # 표시할 열이 하나도 없는 경우 (예: 데이터가 비정상적일 때)
-            st.warning("경보 데이터는 있으나 표시할 내용이 없습니다.")
+            if columns_to_display:
+                st.dataframe(
+                    display_df[columns_to_display].sort_values(by="발생 시각", ascending=False),
+                    width='stretch',
+                    hide_index=True
+                )
+            else:
+                st.warning("경보 데이터는 있으나 표시할 내용이 없습니다.")
 
     def _render_sensor_dashboard(self):
         """실시간 센서 모니터링 페이지를 렌더링합니다."""
@@ -497,16 +492,16 @@ class UnifiedDashboard:
                 config = {'responsive': True, 'displayModeBar': False}
                 for i in range(0, len(sensors_for_graph), 2):
                     graph_cols = st.columns(2)
-                    for j, sensor in enumerate(sensors_for_graph[i:i+2]):
-                        if sensor in df.columns:
+                    for j, sensor_name in enumerate(sensors_for_graph[i:i+2]):
+                        if sensor_name in df.columns:
                             with graph_cols[j]:
-                                fig = px.line(df, x="timestamp", y=sensor, title=f"{sensor} 변화 추세")
+                                fig = px.line(df, x="timestamp", y=sensor_name, title=f"{sensor_name} 변화 추세")
                                 fig.update_layout(
                                     margin=dict(l=20, r=20, t=40, b=20),
                                     xaxis_title="시간",
                                     yaxis_title="값"
                                 )
-                                st.plotly_chart(fig, use_container_width=True, config=config) # plotly는 아직 use_container_width 사용
+                                st.plotly_chart(fig, use_container_width=True, config=config)
 
     def _render_sensor_log_page(self):
         """센서 이벤트 로그 페이지를 렌더링합니다."""
@@ -531,7 +526,7 @@ class UnifiedDashboard:
                             except ValueError:
                                 log_entries.append({"감지 시간 (KST)": parts[0], "메시지": parts[1].strip()})
                     log_df = pd.DataFrame(log_entries)
-                    st.dataframe(log_df, width='stretch', hide_index=True) # [수정] use_container_width=True -> width='stretch'
+                    st.dataframe(log_df, width='stretch', hide_index=True)
 
                     csv_data = log_df.to_csv(index=False).encode('utf-8-sig')
                     st.download_button(
@@ -539,7 +534,7 @@ class UnifiedDashboard:
                         data=csv_data,
                         file_name=f"sensor_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
                         mime="text/csv",
-                        width='stretch' # [수정] use_container_width=True -> width='stretch'
+                        width='stretch'
                     )
                     st.divider()
                     if st.button("🚨 로그 전체 삭제", type="primary"):
@@ -570,7 +565,7 @@ class UnifiedDashboard:
                         with col1:
                             if 'annotated_image_base64' in doc:
                                 img_bytes = base64.b64decode(doc['annotated_image_base64'])
-                                st.image(img_bytes, caption="감지 결과 이미지", width='stretch') # [수정] use_column_width=True -> width='stretch'
+                                st.image(img_bytes, caption="감지 결과 이미지", width='stretch')
                         with col2:
                             st.subheader("상세 감지 정보")
                             detections = doc.get('detections', [])
@@ -605,7 +600,7 @@ class UnifiedDashboard:
                         col1, col2 = st.columns([2, 1])
                         with col1:
                             img_bytes = base64.b64decode(doc['annotated_image_base64'])
-                            st.image(img_bytes, caption="감지 결과 이미지", width='stretch') # [수정] use_column_width=True -> width='stretch'
+                            st.image(img_bytes, caption="감지 결과 이미지", width='stretch')
                         with col2:
                             st.subheader("상세 감지 정보")
                             detections = doc.get('detections', [])
@@ -625,30 +620,23 @@ class UnifiedDashboard:
             st.warning("데이터베이스에 연결할 수 없어 안전 조끼 데이터를 표시할 수 없습니다.")
 
     def _handle_audio_playback(self):
-        """
-        지정된 경로의 .wav 파일을 Base64로 인코딩하여 재생합니다.
-        """
-        
-        # 1. 트리거가 없으면 함수를 즉시 종료
+        """지정된 경로의 .wav 파일을 Base64로 인코딩하여 재생합니다."""
         if not (trigger := st.session_state.play_sound_trigger):
             return
 
-        # 2. 알림음이 비활성화 상태이면 경고 메시지만 표시
         if not st.session_state.get('sound_enabled', False):
             st.toast("⚠️ 알림음을 들으려면 사이드바에서 '알림음 활성화'를 켜주세요.")
-            st.session_state.play_sound_trigger = None # 트리거 초기화
+            st.session_state.play_sound_trigger = None
             return
 
-        # 3. 트리거 종류에 따라 파일 이름 결정
         if trigger == 'fire':
             filename = 'fire_alert.wav'
         elif trigger == 'safety':
             filename = 'safety_alert.wav'
         else:
-            st.session_state.play_sound_trigger = None # 모르는 트리거면 초기화
+            st.session_state.play_sound_trigger = None
             return
 
-        # 4. 파일 경로 설정 및 파일 존재 여부 확인
         file_path = os.path.join('app', 'static', filename)
         
         if not os.path.exists(file_path):
@@ -656,7 +644,6 @@ class UnifiedDashboard:
             st.session_state.play_sound_trigger = None
             return
 
-        # 5. 파일을 읽고 Base64로 인코딩하여 재생
         try:
             with open(file_path, "rb") as f:
                 audio_bytes = f.read()
@@ -671,7 +658,6 @@ class UnifiedDashboard:
             st.error(f"음성 파일 재생 중 오류: {e}")
         
         finally:
-            # 6. 재생 후 트리거 초기화
             st.session_state.play_sound_trigger = None
 
     def run(self):
