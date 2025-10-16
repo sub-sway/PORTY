@@ -200,7 +200,6 @@ class UnifiedDashboard:
                 st.session_state[key] = value
 
     def _process_queues(self):
-    """MQTT 메시지 큐를 처리하여 데이터를 업데이트합니다."""
     # 1. 안전 경보 큐 처리
     while not self.alerts_queue.empty():
         msg = self.alerts_queue.get()
