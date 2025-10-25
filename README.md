@@ -63,7 +63,7 @@
 | <div align="center"><img src="https://github.com/user-attachments/assets/b7c009ae-b82b-40b9-8c23-06eac99e195f" alt="허찌허찌" height="260"/></div> | <div align="center"><img src="https://github.com/user-attachments/assets/0307cb45-649d-4977-b107-5d7a0b6068c8" alt="지윤지윤" height="260"/></div> | <div align="center"><img src="https://github.com/user-attachments/assets/35aec41b-bd36-4978-8841-abef9e09ccd4" alt="윤정윤정" height="260"/></div> | <div align="center"><img src="https://github.com/user-attachments/assets/47b20933-c912-4c3e-88d8-1cf326ef5178" alt="희섭희섭" height="260"/></div> |
 | 전반적인 프로젝트 관리, 자율주행, 센서 제어, 구동부 설계 | CV 모델(화재, 작업복), 모니터링 시스템 제작 | CV 모델 적용(균열), 통합 및 최적화, DB 연동 | 센서 제어, 구동부 설계, 자율주행 |
 | 회의 일정 계획 및 프로젝트 주도, 아두이노, 젯슨 오린, SLAM | CV 화재 감지, 안전복(Hivis) 감지, Streamlit, 시연 환경 조성 | CV 균열 감지, 젯슨 오린 최적화 및 ROS2 파이프라인, MongoDB 연동 | 아두이노, 젯슨 오린, SLAM, 구동, Nav2 |
-| [GitHub](https://github.com/JYsaemyo) | [GitHub](https://github.com/artistyun) | [GitHub](https://github.com/yoonie03) | [GitHub](https://github.com/sub-sway) |
+| [GitHub](https://github.com/JYsaemyo) | [GitHub](https://github.com/artistyun) | [GitHub](https://github.com/yoonie03) | [GitHub](https://github.com/Heuisub) |
 
 <br/>
 <br/>
